@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import type { Message, Table } from '@/lib/model/types';
+import type { Message, PendingTableRequest, Table } from '@/lib/model/types';
 import type { User } from '@supabase/supabase-js';
 import { BottomTabs } from '@/components/layout/BottomTabs';
 import {
@@ -16,7 +16,7 @@ import { WaiterHelpPanel } from '@/components/waiter/WaiterHelpPanel';
 export interface WaiterDashboardViewProps {
   user: User | null;
   tables: Table[];
-  pendingRequests: Message[];
+  pendingRequests: PendingTableRequest[];
   activeTable: string | null;
   messages: Message[];
   text: string;
@@ -99,6 +99,32 @@ export function WaiterDashboardView({
     onLogout();
   }, [onLogout]);
 
+  /** Una card por mesa (ya agregado en el viewmodel). */
+  const requestQueue = pendingRequests;
+
+  const requestTableIds = useMemo(() => {
+    return new Set(requestQueue.map((r) => r.table_id));
+  }, [requestQueue]);
+
+  /** Mesas: solo asignadas o libres sin solicitud activa (excluye fila de solicitudes). */
+  const mesasList = useMemo(() => {
+    const assigned = tables
+      .filter((t) => t.assigned_to)
+      .sort((a, b) => a.name.localeCompare(b.name, 'es'));
+    const idle = tables
+      .filter((t) => !t.assigned_to && !requestTableIds.has(t.id))
+      .sort((a, b) => a.name.localeCompare(b.name, 'es'));
+    return [...assigned, ...idle];
+  }, [tables, requestTableIds]);
+
+  const unreadForTable = useCallback(
+    (tableId: string, assignedTo: string | null | undefined) => {
+      if (!user?.id || assignedTo !== user.id) return 0;
+      return unread[tableId] ?? 0;
+    },
+    [unread, user?.id]
+  );
+
   const listsPanel = (
     <div className="flex h-full min-h-0 flex-1 flex-col gap-5 overflow-y-auto bg-[#F4F6F8] p-4 md:w-[min(100%,24rem)] md:max-w-[26rem] md:shrink-0 md:border-r md:border-[#E5E7EB] md:bg-[#FFFFFF] lg:p-5">
       <section>
@@ -106,14 +132,23 @@ export function WaiterDashboardView({
           Solicitudes
         </h2>
         <div className="space-y-3">
-          {pendingRequests.length === 0 && (
+          {requestQueue.length === 0 && (
             <p className="rounded-xl border border-dashed border-[#E5E7EB] bg-[#FAFBFC] px-4 py-8 text-center text-sm text-[#6B7280]">
               Sin solicitudes pendientes
             </p>
           )}
-          {pendingRequests.map((r) => (
-            <RequestCard key={r.id} request={r} onTakeTable={handleTakeTable} />
-          ))}
+          {requestQueue.map((r) => {
+            const tableLabel =
+              tables.find((t) => t.id === r.table_id)?.name ?? r.table_id;
+            return (
+              <RequestCard
+                key={r.table_id}
+                request={r}
+                tableLabel={tableLabel}
+                onTakeTable={handleTakeTable}
+              />
+            );
+          })}
         </div>
       </section>
 
@@ -122,12 +157,17 @@ export function WaiterDashboardView({
           Mesas
         </h2>
         <div className="space-y-2">
-          {tables.map((t) => (
+          {mesasList.length === 0 && (
+            <p className="rounded-xl border border-dashed border-[#E5E7EB] bg-[#FAFBFC] px-4 py-8 text-center text-sm text-[#6B7280]">
+              No hay mesas en sala
+            </p>
+          )}
+          {mesasList.map((t) => (
             <TableCard
               key={t.id}
               table={t}
               currentUserId={user?.id}
-              unreadCount={unread[t.id] ?? 0}
+              unreadCount={unreadForTable(t.id, t.assigned_to)}
               isChatActive={activeTable === t.id}
               onOpenChat={handleOpenChat}
             />

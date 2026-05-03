@@ -27,6 +27,21 @@ export async function fetchMessagesByRestaurantId(
   return (data as Message[]) ?? [];
 }
 
+/** Solo mensajes que cuentan como solicitud: texto del cliente o llamada al mesero (`system`). */
+export async function fetchRequestSourceMessagesByRestaurantId(
+  client: SupabaseClient,
+  restaurantId: string
+): Promise<Message[]> {
+  const { data } = await client
+    .from('messages')
+    .select('*')
+    .eq('restaurant_id', restaurantId)
+    .in('sender', ['customer', 'system'])
+    .order('created_at', { ascending: true });
+
+  return (data as Message[]) ?? [];
+}
+
 export async function insertMessage(
   client: SupabaseClient,
   row: {

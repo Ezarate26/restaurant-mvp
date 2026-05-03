@@ -30,3 +30,11 @@ export interface Restaurant {
   id: string;
   invite_code?: string;
 }
+
+/** Una fila por mesa en la cola de solicitudes (mensaje cliente + llamar mesero). */
+export interface PendingTableRequest {
+  table_id: string;
+  request_count: number;
+  /** Primera interacción de la mesa en esta cola (ISO), para ordenar. */
+  created_at: string;
+}
