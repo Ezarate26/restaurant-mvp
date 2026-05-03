@@ -5,8 +5,8 @@ import { useRouter } from 'next/navigation';
 import type { User } from '@supabase/supabase-js';
 import { supabase } from '@/lib/supabase';
 import {
-  fetchMessagesByRestaurantId,
   fetchMessagesByTableId,
+  fetchRequestSourceMessagesByRestaurantId,
   insertMessage,
 } from '@/lib/model/messages.repository';
 import {
@@ -15,7 +15,12 @@ import {
 } from '@/lib/model/tables.repository';
 import { fetchProfileByUserId } from '@/lib/model/profiles.repository';
 import { REALTIME_CHANNEL_RESTAURANT } from '@/lib/model/realtime.constants';
-import type { Message, Profile, Table } from '@/lib/model/types';
+import type {
+  Message,
+  PendingTableRequest,
+  Profile,
+  Table,
+} from '@/lib/model/types';
 
 export function useWaiterDashboardViewModel() {
   const router = useRouter();
@@ -24,7 +29,10 @@ export function useWaiterDashboardViewModel() {
   const [profile, setProfile] = useState<Profile | null>(null);
 
   const [tables, setTables] = useState<Table[]>([]);
-  const [requests, setRequests] = useState<Message[]>([]);
+  const tablesSnapshotRef = useRef<Table[]>([]);
+  const [requestSourceMessages, setRequestSourceMessages] = useState<Message[]>(
+    []
+  );
 
   const [activeTable, setActiveTable] = useState<string | null>(null);
   const activeTableRef = useRef<string | null>(null);
@@ -37,6 +45,10 @@ export function useWaiterDashboardViewModel() {
   useEffect(() => {
     activeTableRef.current = activeTable;
   }, [activeTable]);
+
+  useEffect(() => {
+    tablesSnapshotRef.current = tables;
+  }, [tables]);
 
   useEffect(() => {
     let cancelled = false;
@@ -59,12 +71,15 @@ export function useWaiterDashboardViewModel() {
 
       const [tbls, reqs] = await Promise.all([
         fetchTablesByRestaurant(supabase, prof.restaurant_id),
-        fetchMessagesByRestaurantId(supabase, prof.restaurant_id),
+        fetchRequestSourceMessagesByRestaurantId(
+          supabase,
+          prof.restaurant_id
+        ),
       ]);
 
       if (cancelled) return;
       setTables(tbls);
-      setRequests(reqs);
+      setRequestSourceMessages(reqs);
     };
 
     void init();
@@ -82,7 +97,7 @@ export function useWaiterDashboardViewModel() {
             const idx = prev.findIndex((t) => t.id === row.id);
             if (idx >= 0) {
               const copy = [...prev];
-              copy[idx] = row;
+              copy[idx] = { ...copy[idx], ...row };
               return copy;
             }
             return [row, ...prev];
@@ -112,15 +127,15 @@ export function useWaiterDashboardViewModel() {
             [msg.table_id]: (prev[msg.table_id] || 0) + 1,
           }));
 
-          setTables((prevTables) => {
-            const table = prevTables.find((t) => t.id === msg.table_id);
-
-            if (!table || !table.assigned_to) {
-              setRequests((prev) => [msg, ...prev]);
-            }
-
-            return prevTables;
-          });
+          const tbl = tablesSnapshotRef.current.find(
+            (t) => t.id === msg.table_id
+          );
+          if (
+            (msg.sender === 'customer' || msg.sender === 'system') &&
+            !tbl?.assigned_to
+          ) {
+            setRequestSourceMessages((prev) => [...prev, msg]);
+          }
         }
       )
       .subscribe();
@@ -178,12 +193,41 @@ export function useWaiterDashboardViewModel() {
     setText('');
   }, [activeTable, text, profile]);
 
-  const pendingRequests = useMemo(() => {
-    return requests.filter((r) => {
-      const table = tables.find((t) => t.id === r.table_id);
-      return !table?.assigned_to;
-    });
-  }, [requests, tables]);
+  /** Una card por mesa sin asignar; contador = interacciones cliente + llamada mesero. */
+  const pendingRequests = useMemo((): PendingTableRequest[] => {
+    const unassignedIds = new Set(
+      tables.filter((t) => !t.assigned_to).map((t) => t.id)
+    );
+
+    const agg = new Map<string, { count: number; oldest: string }>();
+
+    for (const m of requestSourceMessages) {
+      if (m.sender !== 'customer' && m.sender !== 'system') continue;
+      if (!unassignedIds.has(m.table_id)) continue;
+
+      const created = m.created_at ?? '';
+      const cur = agg.get(m.table_id);
+      if (!cur) {
+        agg.set(m.table_id, { count: 1, oldest: created });
+      } else {
+        cur.count += 1;
+        if (created && (!cur.oldest || created < cur.oldest)) {
+          cur.oldest = created;
+        }
+      }
+    }
+
+    return Array.from(agg.entries())
+      .map(([table_id, v]) => ({
+        table_id,
+        request_count: v.count,
+        created_at: v.oldest || new Date(0).toISOString(),
+      }))
+      .sort(
+        (a, b) =>
+          new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
+      );
+  }, [requestSourceMessages, tables]);
 
   return {
     user,
