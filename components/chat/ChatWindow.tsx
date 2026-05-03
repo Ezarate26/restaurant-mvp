@@ -7,6 +7,7 @@ import { MessageBubble } from '@/components/chat/MessageBubble';
 export interface ChatWindowProps {
   activeTableId: string | null;
   messages: Message[];
+  currentUserType: Exclude<Message['sender'], 'system'>;
   draft: string;
   onDraftChange: (value: string) => void;
   onSend: () => void;
@@ -20,30 +21,22 @@ const inputClass =
 export function ChatWindow({
   activeTableId,
   messages,
+  currentUserType,
   draft,
   onDraftChange,
   onSend,
   emptyTitle = 'Selecciona una mesa',
   emptySubtitle = 'Abre el chat desde una mesa asignada para ver la conversación.',
 }: ChatWindowProps) {
-  const scrollRef = useRef<HTMLDivElement | null>(null);
+  const messageEndRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
-    const el = scrollRef.current;
-    if (!el) return;
-
-    const isNearBottom =
-      el.scrollHeight - el.scrollTop - el.clientHeight < 80;
-
-    if (isNearBottom) {
-      el.scrollTop = el.scrollHeight;
-    }
+    messageEndRef.current?.scrollIntoView({ block: 'end' });
   }, [messages]);
 
   useEffect(() => {
-    const el = scrollRef.current;
-    if (!el || !activeTableId) return;
-    el.scrollTop = el.scrollHeight;
+    if (!activeTableId) return;
+    messageEndRef.current?.scrollIntoView({ block: 'end' });
   }, [activeTableId]);
 
   if (!activeTableId) {
@@ -69,7 +62,6 @@ export function ChatWindow({
       </header>
 
       <div
-        ref={scrollRef}
         className="flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto bg-[#E9EEF2] px-3 py-3"
       >
         {messages.length === 0 && (
@@ -78,11 +70,12 @@ export function ChatWindow({
           </p>
         )}
         {messages.map((m) => (
-          <MessageBubble key={m.id} message={m} />
+          <MessageBubble key={m.id} message={m} currentUserType={currentUserType} />
         ))}
+        <div ref={messageEndRef} />
       </div>
 
-      <div className="sticky bottom-0 z-10 shrink-0 border-t border-[#E5E7EB] bg-[#FFFFFF] p-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] md:rounded-b-xl">
+      <div className="shrink-0 border-t border-[#E5E7EB] bg-[#FFFFFF] p-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] md:rounded-b-xl">
         <div className="flex gap-2">
           <input
             className={inputClass}

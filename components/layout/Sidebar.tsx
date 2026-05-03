@@ -65,6 +65,7 @@ export function Sidebar({
       <nav className="flex flex-1 flex-col gap-1 p-2" aria-label="Principal">
         {navItems.map((item) => {
           const isActive = active === item.id;
+          const visibilityClass = item.id === 'chat' ? 'md:hidden' : 'block';
           return (
             <button
               key={item.id}
@@ -76,7 +77,7 @@ export function Sidebar({
                 isActive
                   ? 'bg-[#E3F2FD] text-[#229ED9]'
                   : 'text-[#1F2937] hover:bg-[#F4F6F8]'
-              }`}
+              } ${visibilityClass}`}
             >
               <span className="text-lg leading-none" aria-hidden>
                 {item.emoji}

@@ -94,9 +94,14 @@ export function useWaiterDashboardViewModel() {
         { event: 'INSERT', schema: 'public', table: 'messages' },
         (payload) => {
           const msg = payload.new as Message;
+          const isActiveConversation = msg.table_id === activeTableRef.current;
 
-          if (msg.table_id === activeTableRef.current) {
+          if (isActiveConversation) {
             setMessages((prev) => [...prev, msg]);
+            setUnread((prev) => ({
+              ...prev,
+              [msg.table_id]: 0,
+            }));
             return;
           }
 
@@ -132,6 +137,7 @@ export function useWaiterDashboardViewModel() {
   }, [router]);
 
   const openChat = useCallback(async (tableId: string) => {
+    activeTableRef.current = tableId;
     setActiveTable(tableId);
 
     setUnread((prev) => ({
@@ -140,6 +146,7 @@ export function useWaiterDashboardViewModel() {
     }));
 
     const data = await fetchMessagesByTableId(supabase, tableId);
+    if (activeTableRef.current !== tableId) return;
     setMessages(data);
   }, []);
 
