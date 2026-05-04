@@ -1,55 +1,47 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Message, MessageSender } from './types';
 
-export async function fetchMessagesByTableId(
+export async function fetchMessagesBySession(
   client: SupabaseClient,
-  tableId: string
+  sessionId: string
 ): Promise<Message[]> {
-  const { data } = await client
+  const { data, error } = await client
     .from('messages')
     .select('*')
-    .eq('table_id', tableId)
+    .eq('session_id', sessionId)
     .order('created_at', { ascending: true });
 
-  return (data as Message[]) ?? [];
-}
-
-export async function fetchMessagesByRestaurantId(
-  client: SupabaseClient,
-  restaurantId: string
-): Promise<Message[]> {
-  const { data } = await client
-    .from('messages')
-    .select('*')
-    .eq('restaurant_id', restaurantId)
-    .order('created_at', { ascending: false });
-
-  return (data as Message[]) ?? [];
-}
-
-/** Solo mensajes que cuentan como solicitud: texto del cliente o llamada al mesero (`system`). */
-export async function fetchRequestSourceMessagesByRestaurantId(
-  client: SupabaseClient,
-  restaurantId: string
-): Promise<Message[]> {
-  const { data } = await client
-    .from('messages')
-    .select('*')
-    .eq('restaurant_id', restaurantId)
-    .in('sender', ['customer', 'system'])
-    .order('created_at', { ascending: true });
-
+  if (error) {
+    console.error('fetchMessagesBySession', error);
+    return [];
+  }
   return (data as Message[]) ?? [];
 }
 
 export async function insertMessage(
   client: SupabaseClient,
   row: {
-    table_id: string;
+    session_id: string;
     restaurant_id: string;
     sender: MessageSender;
     text: string;
+    session_user_id?: string | null;
+    user_identifier?: string | null;
   }
 ): Promise<void> {
-  await client.from('messages').insert([row]);
+  const { error } = await client.from('messages').insert([
+    {
+      session_id: row.session_id,
+      restaurant_id: row.restaurant_id,
+      sender: row.sender,
+      text: row.text,
+      session_user_id: row.session_user_id ?? null,
+      user_identifier: row.user_identifier ?? null,
+    },
+  ]);
+
+  if (error) {
+    console.error('insertMessage', error);
+    throw error;
+  }
 }

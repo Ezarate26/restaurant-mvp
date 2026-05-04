@@ -1,7 +1,11 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import type { Message, PendingTableRequest, Table } from '@/lib/model/types';
+import type { Message } from '@/lib/model/types';
+import type {
+  PendingTableRequestView as PendingTableRequest,
+  TableView as Table,
+} from '@/lib/adapters/types';
 import type { User } from '@supabase/supabase-js';
 import { BottomTabs } from '@/components/layout/BottomTabs';
 import {

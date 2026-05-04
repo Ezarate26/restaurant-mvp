@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, type ReactNode } from 'react';
 import type { Message } from '@/lib/model/types';
 import { MessageBubble } from '@/components/chat/MessageBubble';
 
@@ -11,6 +11,10 @@ export interface TableChatViewProps {
   onMessageChange: (value: string) => void;
   onSend: () => void;
   onCallWaiter: () => void;
+  /** Etiqueta legible (ej. nombre del service_point). Si no, se muestra `tableId`. */
+  headerLabel?: string;
+  /** Slot opcional debajo del header para inyectar UI extra (ej. SessionUsersList). */
+  usersSlot?: ReactNode;
 }
 
 export function TableChatView({
@@ -20,6 +24,8 @@ export function TableChatView({
   onMessageChange,
   onSend,
   onCallWaiter,
+  headerLabel,
+  usersSlot,
 }: TableChatViewProps) {
   const messageEndRef = useRef<HTMLDivElement | null>(null);
 
@@ -35,9 +41,11 @@ export function TableChatView({
             Mesa
           </p>
           <h1 className="mt-1 text-xl font-semibold text-[#1F2937]">
-            {tableId}
+            {headerLabel ?? tableId}
           </h1>
         </header>
+
+        {usersSlot && <div className="mt-3 shrink-0">{usersSlot}</div>}
 
         <button
           type="button"

@@ -1,6 +1,6 @@
 'use client';
 
-import type { Table } from '@/lib/model/types';
+import type { TableView as Table } from '@/lib/adapters/types';
 
 export interface TableCardProps {
   table: Table;

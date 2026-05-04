@@ -1,40 +1,128 @@
-export type MessageSender = 'customer' | 'waiter' | 'system';
+export type BusinessMode = 'multi_table' | 'single_point' | 'hybrid';
+export type ServicePointType = 'table' | 'counter' | string;
+export type ServicePointModeOverride = 'inherit' | 'multi' | 'single';
+export type ServiceSessionStatus = 'active' | 'closed' | string;
+export type ServiceSessionType = 'table' | 'counter' | string;
+export type SessionUserStatus = 'active' | 'waiting' | 'left';
+export type ServiceRequestStatus = 'pending' | 'assigned' | 'resolved' | string;
+export type ServiceRequestType = 'call' | 'order' | string;
+export type MessageSender = 'customer' | 'waiter' | 'system' | string;
+export type ProfileRole = 'owner' | 'admin' | 'waiter' | string;
+
+export interface Restaurant {
+  id: string;
+  name: string | null;
+  invite_code: string | null;
+  owner_name: string | null;
+  phone: string | null;
+  email: string | null;
+  address: string | null;
+  business_mode: BusinessMode;
+  created_at?: string | null;
+}
+
+export interface RestaurantSettings {
+  id: string;
+  restaurant_id: string;
+  allow_tables: boolean;
+  allow_walkins: boolean;
+  default_language: string;
+  created_at?: string | null;
+}
+
+export interface ServicePoint {
+  id: string;
+  restaurant_id: string;
+  name: string | null;
+  type: ServicePointType;
+  qr_code: string | null;
+  is_active: boolean;
+  capacity: number;
+  location_note: string | null;
+  mode_override: ServicePointModeOverride;
+  created_at?: string | null;
+}
+
+export interface ServiceSession {
+  id: string;
+  restaurant_id: string;
+  type: ServiceSessionType;
+  status: ServiceSessionStatus;
+  assigned_to: string | null;
+  language: string | null;
+  service_point_id: string | null;
+  customer_count: number | null;
+  channel: string | null;
+  notes: string | null;
+  closed_reason: string | null;
+  created_by: string | null;
+  created_at?: string | null;
+  started_at?: string | null;
+  ended_at?: string | null;
+  last_activity_at?: string | null;
+}
+
+export interface SessionUser {
+  id: string;
+  session_id: string;
+  user_identifier: string | null;
+  language: string | null;
+  status: SessionUserStatus;
+  joined_at?: string | null;
+  left_at?: string | null;
+}
+
+export interface ServiceRequest {
+  id: string;
+  restaurant_id: string | null;
+  type: ServiceRequestType | null;
+  message: string | null;
+  status: ServiceRequestStatus;
+  assigned_to: string | null;
+  service_session_id: string | null;
+  created_at?: string | null;
+  last_request_at?: string | null;
+}
 
 export interface Message {
   id: string;
-  table_id: string;
-  restaurant_id: string;
-  sender: MessageSender;
-  text: string;
-  created_at?: string;
-}
-
-export interface Table {
-  id: string;
-  restaurant_id: string;
-  name: string;
-  assigned_to: string | null;
-  assigned_to_name: string | null;
-  status: string;
+  sender: MessageSender | null;
+  text: string | null;
+  restaurant_id: string | null;
+  session_id: string | null;
+  session_user_id: string | null;
+  user_identifier: string | null;
+  created_at?: string | null;
 }
 
 export interface Profile {
   id: string;
-  email?: string;
-  full_name: string;
-  employee_number?: string | null;
-  restaurant_id: string;
+  email: string | null;
+  full_name: string | null;
+  employee_number: string | null;
+  restaurant_id: string | null;
+  role: ProfileRole;
+  is_active: boolean;
+  created_at?: string | null;
 }
 
-export interface Restaurant {
+export interface QrEntry {
   id: string;
-  invite_code?: string;
+  restaurant_id: string;
+  type: string;
+  target_id: string | null;
+  service_point_id: string | null;
+  session_id: string | null;
+  expires_at: string | null;
+  created_at?: string | null;
 }
 
-/** Una fila por mesa en la cola de solicitudes (mensaje cliente + llamar mesero). */
-export interface PendingTableRequest {
-  table_id: string;
-  request_count: number;
-  /** Primera interacción de la mesa en esta cola (ISO), para ordenar. */
-  created_at: string;
+export interface Order {
+  id: string;
+  restaurant_id: string | null;
+  status: string;
+  assigned_to: string | null;
+  language: string | null;
+  service_session_id: string | null;
+  created_at?: string | null;
 }
