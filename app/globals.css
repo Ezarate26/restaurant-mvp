@@ -17,3 +17,22 @@ body {
   color: var(--foreground);
   font-family: var(--font-geist-sans), system-ui, sans-serif;
 }
+
+@media (prefers-reduced-motion: no-preference) {
+  .profile-chip-bounce {
+    animation: profile-chip-bounce 1.35s ease-in-out infinite;
+  }
+}
+
+@keyframes profile-chip-bounce {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  40% {
+    transform: translateY(-4px);
+  }
+  65% {
+    transform: translateY(0);
+  }
+}

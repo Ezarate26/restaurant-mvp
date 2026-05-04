@@ -8,20 +8,25 @@ export interface SessionUsersListProps {
   currentUserIdentifier?: string | null;
 }
 
-function shortLabel(u: SessionUser, idx: number): string {
-  const id = u.user_identifier ?? '';
-  if (id.length > 0) {
-    const tail = id.slice(-4).toUpperCase();
-    return `Cliente ${tail}`;
-  }
-  return `Cliente ${idx + 1}`;
+function getDisplayName(u: SessionUser, idx: number): string {
+  return (
+    u.display_name?.trim() ||
+    u.username?.trim() ||
+    `Usuario ${idx + 1}`
+  );
 }
 
 export function SessionUsersList({
   sessionUsers,
   currentUserIdentifier,
 }: SessionUsersListProps) {
-  const total = sessionUsers.length;
+  const orderedUsers = [...sessionUsers].sort((a, b) => {
+    const aTs = Date.parse(a.joined_at ?? '');
+    const bTs = Date.parse(b.joined_at ?? '');
+    if (Number.isFinite(aTs) && Number.isFinite(bTs)) return aTs - bTs;
+    return 0;
+  });
+  const total = orderedUsers.length;
 
   if (total === 0) {
     return (
@@ -33,17 +38,17 @@ export function SessionUsersList({
 
   return (
     <div className="rounded-xl border border-[#E5E7EB] bg-white px-3 py-2 shadow-sm">
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between gap-2">
         <p className="text-[10px] font-semibold uppercase tracking-wide text-[#6B7280]">
           Clientes conectados
         </p>
-        <span className="rounded-full bg-[#E3F2FD] px-2 py-0.5 text-[10px] font-bold text-[#229ED9]">
+        <span className="rounded-full bg-[#E3F2FD] px-2 py-0.5 text-[10px] font-bold leading-none text-[#229ED9]">
           {total}
         </span>
       </div>
 
-      <ul className="mt-1.5 flex flex-wrap gap-1.5">
-        {sessionUsers.map((u, i) => {
+      <ul className="mt-1.5 flex flex-wrap items-center gap-1.5">
+        {orderedUsers.map((u, i) => {
           const isMe =
             currentUserIdentifier != null &&
             u.user_identifier === currentUserIdentifier;
@@ -56,7 +61,7 @@ export function SessionUsersList({
                   : 'bg-[#F4F6F8] text-[#1F2937]'
               }`}
             >
-              {isMe ? 'Tú' : shortLabel(u, i)}
+              {isMe ? 'Tú' : getDisplayName(u, i)}
             </li>
           );
         })}

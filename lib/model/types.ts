@@ -67,6 +67,10 @@ export interface SessionUser {
   id: string;
   session_id: string;
   user_identifier: string | null;
+  display_name?: string | null;
+  username?: string | null;
+  email?: string | null;
+  is_profile_completed?: boolean | null;
   language: string | null;
   status: SessionUserStatus;
   joined_at?: string | null;
@@ -85,6 +89,14 @@ export interface ServiceRequest {
   last_request_at?: string | null;
 }
 
+/** Fila anidada opcional desde `.select('*, session_users(...)')`. */
+export interface MessageSessionUserJoin {
+  user_identifier: string | null;
+  display_name?: string | null;
+  username?: string | null;
+  email?: string | null;
+}
+
 export interface Message {
   id: string;
   sender: MessageSender | null;
@@ -94,6 +106,7 @@ export interface Message {
   session_user_id: string | null;
   user_identifier: string | null;
   created_at?: string | null;
+  session_users?: MessageSessionUserJoin | MessageSessionUserJoin[] | null;
 }
 
 export interface Profile {

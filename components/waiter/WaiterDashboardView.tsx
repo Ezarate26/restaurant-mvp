@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import type { Message } from '@/lib/model/types';
+import type { Message, SessionUser } from '@/lib/model/types';
 import type {
   PendingTableRequestView as PendingTableRequest,
   TableView as Table,
@@ -30,6 +30,8 @@ export interface WaiterDashboardViewProps {
   onTakeTable: (tableId: string) => void;
   onOpenChat: (tableId: string) => void;
   onSendMessage: () => void;
+  typingIndicator?: string | null;
+  chatSessionUsers?: SessionUser[];
 }
 
 export function WaiterDashboardView({
@@ -45,6 +47,8 @@ export function WaiterDashboardView({
   onTakeTable,
   onOpenChat,
   onSendMessage,
+  typingIndicator = null,
+  chatSessionUsers = [],
 }: WaiterDashboardViewProps) {
   const [nav, setNav] = useState<WaiterNavSection>('home');
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
@@ -196,6 +200,8 @@ export function WaiterDashboardView({
         draft={text}
         onDraftChange={onTextChange}
         onSend={onSendMessage}
+        typingIndicator={typingIndicator}
+        sessionUsers={chatSessionUsers}
       />
     </div>
   );

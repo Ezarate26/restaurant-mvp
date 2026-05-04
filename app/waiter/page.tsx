@@ -14,12 +14,17 @@ export default function WaiterPage() {
       activeTable={vm.activeTable}
       messages={vm.messages}
       text={vm.text}
-      onTextChange={vm.setText}
+      onTextChange={(v) => {
+        vm.setText(v);
+        vm.notifyTyping();
+      }}
+      typingIndicator={vm.typingIndicator}
       unread={vm.unread}
       onLogout={vm.handleLogout}
       onTakeTable={vm.takeTable}
       onOpenChat={vm.openChat}
       onSendMessage={vm.sendMessage}
+      chatSessionUsers={vm.chatSessionUsers}
     />
   );
 }

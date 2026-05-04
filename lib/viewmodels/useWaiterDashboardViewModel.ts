@@ -22,7 +22,10 @@ import {
   fetchProfileByUserId,
   fetchProfilesByIds,
 } from '@/lib/model/profiles.repository';
-import { REALTIME_CHANNEL_RESTAURANT } from '@/lib/model/realtime.constants';
+import {
+  REALTIME_CHANNEL_RESTAURANT,
+  REALTIME_CHANNEL_SESSION,
+} from '@/lib/model/realtime.constants';
 import { sessionToTableView } from '@/lib/adapters/sessionToTable';
 import { groupServiceRequestsBySession } from '@/lib/adapters/serviceRequestToPending';
 import type {
@@ -37,6 +40,12 @@ import type {
   PendingTableRequestView,
   TableView,
 } from '@/lib/adapters/types';
+
+type ChatTypingPayload = {
+  session_id: string;
+  user_id: string;
+  sender: 'customer' | 'waiter';
+};
 
 export function useWaiterDashboardViewModel() {
   const router = useRouter();
@@ -58,8 +67,19 @@ export function useWaiterDashboardViewModel() {
   const [text, setText] = useState('');
 
   const [unread, setUnread] = useState<Record<string, number>>({});
+  const [typingIndicator, setTypingIndicator] = useState<string | null>(null);
 
   const userIdRef = useRef<string | null>(null);
+  const sessionUsersRef = useRef<SessionUser[]>([]);
+  const waiterSessionChannelRef = useRef<ReturnType<
+    typeof supabase.channel
+  > | null>(null);
+  const typingHideRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const lastTypingSentRef = useRef(0);
+
+  useEffect(() => {
+    sessionUsersRef.current = sessionUsers;
+  }, [sessionUsers]);
 
   useEffect(() => {
     activeSessionIdRef.current = activeSessionId;
@@ -278,6 +298,59 @@ export function useWaiterDashboardViewModel() {
     };
   }, [restaurantId]);
 
+  useEffect(() => {
+    if (!activeSessionId) {
+      setTypingIndicator(null);
+      waiterSessionChannelRef.current = null;
+      return;
+    }
+
+    const flashTypingLine = (label: string) => {
+      if (typingHideRef.current) clearTimeout(typingHideRef.current);
+      setTypingIndicator(label);
+      typingHideRef.current = setTimeout(() => {
+        setTypingIndicator(null);
+        typingHideRef.current = null;
+      }, 2600);
+    };
+
+    const channel = supabase
+      .channel(`${REALTIME_CHANNEL_SESSION}:${activeSessionId}`)
+      .on('broadcast', { event: 'typing' }, ({ payload }) => {
+        const p = payload as ChatTypingPayload;
+        if (
+          !p?.session_id ||
+          p.session_id !== activeSessionIdRef.current ||
+          !p.user_id ||
+          !p.sender
+        ) {
+          return;
+        }
+
+        if (p.sender === 'waiter' && p.user_id === userIdRef.current) return;
+
+        if (p.sender === 'customer') {
+          const su = sessionUsersRef.current.find((u) => u.id === p.user_id);
+          const idLabel = su?.user_identifier?.trim();
+          flashTypingLine(
+            idLabel
+              ? `Usuario ${idLabel} está escribiendo…`
+              : 'Un cliente está escribiendo…'
+          );
+        }
+      })
+      .subscribe((status) => {
+        if (status === 'SUBSCRIBED') {
+          waiterSessionChannelRef.current = channel;
+        }
+      });
+
+    return () => {
+      waiterSessionChannelRef.current = null;
+      supabase.removeChannel(channel);
+    };
+  }, [activeSessionId]);
+
   const sessionsRef = useRef<ServiceSession[]>([]);
   useEffect(() => {
     sessionsRef.current = sessions;
@@ -319,6 +392,7 @@ export function useWaiterDashboardViewModel() {
   const openChat = useCallback(async (sessionId: string) => {
     activeSessionIdRef.current = sessionId;
     setActiveSessionId(sessionId);
+    setTypingIndicator(null);
     setUnread((prev) => ({ ...prev, [sessionId]: 0 }));
 
     const data = await fetchMessagesBySession(supabase, sessionId);
@@ -357,6 +431,25 @@ export function useWaiterDashboardViewModel() {
       console.error('sendMessage', e);
     }
   }, [activeSessionId, text, profile]);
+
+  const notifyTyping = useCallback(() => {
+    const ch = waiterSessionChannelRef.current;
+    const sid = activeSessionId;
+    const uid = user?.id;
+    if (!ch || !sid || !uid) return;
+    const now = Date.now();
+    if (now - lastTypingSentRef.current < 850) return;
+    lastTypingSentRef.current = now;
+    void ch.send({
+      type: 'broadcast',
+      event: 'typing',
+      payload: {
+        session_id: sid,
+        user_id: uid,
+        sender: 'waiter',
+      } satisfies ChatTypingPayload,
+    });
+  }, [activeSessionId, user?.id]);
 
   // --- Adapters → forma esperada por WaiterDashboardView ---
 
@@ -398,6 +491,13 @@ export function useWaiterDashboardViewModel() {
     return m;
   }, [sessionUsers]);
 
+  const chatSessionUsers = useMemo(() => {
+    if (!activeSessionId) return [];
+    return sessionUsers.filter(
+      (u) => u.session_id === activeSessionId && u.status !== 'left'
+    );
+  }, [activeSessionId, sessionUsers]);
+
   // Mantener firma compatible con el page actual.
   return {
     user,
@@ -414,5 +514,8 @@ export function useWaiterDashboardViewModel() {
     takeTable,
     openChat,
     sendMessage,
+    typingIndicator,
+    notifyTyping,
+    chatSessionUsers,
   };
 }
