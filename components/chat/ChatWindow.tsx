@@ -6,6 +6,8 @@ import { MessageBubble } from '@/components/chat/MessageBubble';
 
 export interface ChatWindowProps {
   activeTableId: string | null;
+  /** Nombre del punto/mesa (`service_point.name`); si falta, no usar el id de sesión como título visual. */
+  activeTableName?: string | null;
   messages: Message[];
   currentUserType: Exclude<Message['sender'], 'system'>;
   draft: string;
@@ -20,6 +22,7 @@ const inputClass =
 
 export function ChatWindow({
   activeTableId,
+  activeTableName,
   messages,
   currentUserType,
   draft,
@@ -56,8 +59,10 @@ export function ChatWindow({
         <p className="text-[10px] font-semibold uppercase tracking-wide text-[#6B7280]">
           Conversación
         </p>
-        <h2 className="font-mono text-lg font-semibold text-[#1F2937]">
-          Mesa {activeTableId}
+        <h2 className="text-lg font-semibold text-[#1F2937]">
+          {activeTableName?.trim()
+            ? activeTableName.trim()
+            : `Mesa (${activeTableId.slice(0, 8)}…)`}
         </h2>
       </header>
 
