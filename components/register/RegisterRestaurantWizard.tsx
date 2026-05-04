@@ -5,29 +5,29 @@ import { useRegisterRestaurantViewModel } from '@/lib/viewmodels/useRegisterRest
 import { Step1BasicInfo } from './Step1BasicInfo';
 import { Step2Address } from './Step2Address';
 import { Step3BusinessMode } from './Step3BusinessMode';
-import { Step4OwnerAccount } from './Step4OwnerAccount';
 
-const STEP_LABELS: Record<1 | 2 | 3 | 4, string> = {
+const STEP_LABELS: Record<1 | 2 | 3, string> = {
   1: 'Datos',
   2: 'Dirección',
   3: 'Operación',
-  4: 'Cuenta',
 };
 
 export function RegisterRestaurantWizard() {
   const router = useRouter();
   const vm = useRegisterRestaurantViewModel();
 
-  const isOwnerStep = vm.step === 4;
-  const canNext =
+  const isSubmitStep = vm.step === 3;
+  const canContinue =
     (vm.step === 1 && vm.canAdvanceFromStep1) ||
     (vm.step === 2 && vm.canAdvanceFromStep2);
-  const isLastConfig = vm.step === 3;
 
-  const handleOwnerSubmit = async () => {
-    const out = await vm.submitOwnerAccount();
-    if (out.ok) {
+  const handleSubmitRegistration = async () => {
+    const out = await vm.submitRegistration();
+    if (!out.ok) return;
+    if (out.skipVerify) {
       router.push('/owner');
+    } else {
+      router.push('/verify-email');
     }
   };
 
@@ -50,6 +50,19 @@ export function RegisterRestaurantWizard() {
               <Step1BasicInfo
                 value={vm.basics}
                 onChange={vm.setBasics}
+                password={vm.ownerPassword}
+                confirmPassword={vm.ownerConfirmPassword}
+                showPassword={vm.showOwnerPassword}
+                showConfirmPassword={vm.showOwnerConfirmPassword}
+                onPasswordChange={vm.setOwnerPassword}
+                onConfirmPasswordChange={vm.setOwnerConfirmPassword}
+                onToggleShowPassword={() =>
+                  vm.setShowOwnerPassword((v) => !v)
+                }
+                onToggleShowConfirmPassword={() =>
+                  vm.setShowOwnerConfirmPassword((v) => !v)
+                }
+                passwordMismatch={vm.passwordMismatch}
               />
             )}
             {vm.step === 2 && (
@@ -64,33 +77,9 @@ export function RegisterRestaurantWizard() {
                 onChange={vm.setBusiness}
               />
             )}
-            {vm.step === 4 && vm.result && (
-              <Step4OwnerAccount
-                email={vm.basics.email.trim()}
-                result={vm.result}
-                password={vm.ownerPassword}
-                confirmPassword={vm.ownerConfirmPassword}
-                showPassword={vm.showOwnerPassword}
-                showConfirmPassword={vm.showOwnerConfirmPassword}
-                onPasswordChange={vm.setOwnerPassword}
-                onConfirmPasswordChange={vm.setOwnerConfirmPassword}
-                onToggleShowPassword={() =>
-                  vm.setShowOwnerPassword((v) => !v)
-                }
-                onToggleShowConfirmPassword={() =>
-                  vm.setShowOwnerConfirmPassword((v) => !v)
-                }
-              />
-            )}
           </div>
 
-          {vm.error && !isOwnerStep && (
-            <p className="mt-4 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs font-medium text-red-700">
-              {vm.error}
-            </p>
-          )}
-
-          {isOwnerStep && vm.ownerError && (
+          {vm.ownerError && (
             <p className="mt-4 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs font-medium text-red-700">
               {vm.ownerError}
             </p>
@@ -100,47 +89,31 @@ export function RegisterRestaurantWizard() {
             <button
               type="button"
               onClick={vm.goBack}
-              disabled={
-                vm.step === 1 ||
-                vm.step === 4 ||
-                vm.submitting ||
-                vm.ownerSubmitting
-              }
+              disabled={vm.step === 1 || vm.ownerSubmitting}
               className="rounded-xl px-4 py-2.5 text-sm font-semibold text-[#1F2937] transition hover:bg-[#F4F6F8] disabled:cursor-not-allowed disabled:opacity-40"
             >
               Atrás
             </button>
 
-            {!isOwnerStep && !isLastConfig && (
+            {!isSubmitStep && (
               <button
                 type="button"
                 onClick={vm.goNext}
-                disabled={!canNext || vm.submitting}
+                disabled={!canContinue}
                 className="rounded-xl bg-[#229ED9] px-5 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:brightness-95 disabled:cursor-not-allowed disabled:opacity-50"
               >
                 Continuar
               </button>
             )}
 
-            {!isOwnerStep && isLastConfig && (
+            {isSubmitStep && (
               <button
                 type="button"
-                onClick={vm.submit}
-                disabled={!vm.canSubmit || vm.submitting}
+                onClick={() => void handleSubmitRegistration()}
+                disabled={!vm.canSubmitRegistration || vm.ownerSubmitting}
                 className="rounded-xl bg-[#229ED9] px-5 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:brightness-95 disabled:cursor-not-allowed disabled:opacity-50"
               >
-                {vm.submitting ? 'Creando…' : 'Crear restaurante'}
-              </button>
-            )}
-
-            {isOwnerStep && (
-              <button
-                type="button"
-                onClick={handleOwnerSubmit}
-                disabled={!vm.canSubmitOwnerAccount || vm.ownerSubmitting}
-                className="rounded-xl bg-[#229ED9] px-5 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:brightness-95 disabled:cursor-not-allowed disabled:opacity-50"
-              >
-                {vm.ownerSubmitting ? 'Entrando…' : 'Crear cuenta e ingresar'}
+                {vm.ownerSubmitting ? 'Registrando…' : 'Registrar restaurante'}
               </button>
             )}
           </div>
@@ -150,8 +123,8 @@ export function RegisterRestaurantWizard() {
   );
 }
 
-function ProgressBar({ current }: { current: 1 | 2 | 3 | 4 }) {
-  const steps: (1 | 2 | 3 | 4)[] = [1, 2, 3, 4];
+function ProgressBar({ current }: { current: 1 | 2 | 3 }) {
+  const steps: (1 | 2 | 3)[] = [1, 2, 3];
   return (
     <ol className="flex flex-wrap items-center gap-y-2" aria-label="Progreso del wizard">
       {steps.map((n, i) => {

@@ -62,6 +62,8 @@ export interface CreateRestaurantInput {
   tablesCount?: number;
   /** Idioma por defecto. Default 'es'. */
   defaultLanguage?: string;
+  /** Usuario Auth propietario (`restaurants.owner_id`). */
+  ownerUserId: string;
 }
 
 export interface CreateRestaurantResult {
@@ -130,6 +132,7 @@ export async function createRestaurantWithSettingsAndPoints(
         address: input.address,
         business_mode: input.businessMode,
         invite_code: inviteCode,
+        owner_id: input.ownerUserId,
       },
     ])
     .select('*')

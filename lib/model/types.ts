@@ -18,6 +18,7 @@ export interface Restaurant {
   email: string | null;
   address: string | null;
   business_mode: BusinessMode;
+  owner_id?: string | null;
   created_at?: string | null;
 }
 
@@ -103,6 +104,7 @@ export interface Profile {
   restaurant_id: string | null;
   role: ProfileRole;
   is_active: boolean;
+  language?: string | null;
   created_at?: string | null;
 }
 

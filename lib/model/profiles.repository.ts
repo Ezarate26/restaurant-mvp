@@ -69,6 +69,8 @@ export async function insertWaiterProfile(
     employee_number: string | null;
     restaurant_id: string;
     role: ProfileRole;
+    /** `profiles.language`; por defecto `es`. */
+    language?: string;
   }
 ) {
   return client.from('profiles').insert([
@@ -80,6 +82,7 @@ export async function insertWaiterProfile(
       restaurant_id: row.restaurant_id,
       role: row.role,
       is_active: true,
+      language: row.language ?? 'es',
     },
   ]);
 }

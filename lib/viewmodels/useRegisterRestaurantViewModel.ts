@@ -2,17 +2,28 @@
 
 import { useCallback, useMemo, useState } from 'react';
 import { supabase } from '@/lib/supabase';
-import { createRestaurantWithSettingsAndPoints } from '@/lib/model/restaurants.repository';
-import { insertWaiterProfile } from '@/lib/model/profiles.repository';
+import type { PendingOwnerRestaurantPayload } from '@/lib/auth/pending-registration.storage';
+import {
+  savePendingOwnerRestaurant,
+  savePendingVerifyCredentials,
+  clearPendingOwnerRestaurant,
+  clearPendingVerifyCredentials,
+} from '@/lib/auth/pending-registration.storage';
 import type { BusinessMode } from '@/lib/model/types';
+import { normalizeAppLanguage } from '@/lib/model/language-options';
+import {
+  finalizePendingRegistration,
+  precheckOwnerSignupEmail,
+} from '@/lib/auth/finalize-pending-registration';
 
-export type WizardStep = 1 | 2 | 3 | 4;
+export type WizardStep = 1 | 2 | 3;
 
 export interface BasicInfoState {
   name: string;
   ownerName: string;
   email: string;
   phone: string;
+  defaultLanguage: string;
 }
 
 export interface AddressState {
@@ -24,17 +35,25 @@ export interface BusinessModeState {
   tablesCount: number;
 }
 
+/** @deprecated Conservado por StepSuccess / referencias; el wizard ya no lo usa en el flujo principal. */
 export interface WizardResult {
   restaurantId: string;
   inviteCode: string;
-  /** Email del propietario al que se envió el código (eco para UI). */
   email: string;
-  /** Estado del envío del email; el wizard NO falla si esto es false. */
   inviteEmailSent: boolean;
   inviteEmailError?: string;
 }
 
 const MIN_PASSWORD_LEN = 6;
+
+function isDuplicateAuthSignupMessage(msg: string): boolean {
+  const m = msg.toLowerCase();
+  return (
+    m.includes('already registered') ||
+    m.includes('already been registered') ||
+    m.includes('user already exists')
+  );
+}
 
 export function useRegisterRestaurantViewModel() {
   const [step, setStep] = useState<WizardStep>(1);
@@ -44,6 +63,7 @@ export function useRegisterRestaurantViewModel() {
     ownerName: '',
     email: '',
     phone: '',
+    defaultLanguage: 'es',
   });
 
   const [addressState, setAddressState] = useState<AddressState>({
@@ -61,28 +81,30 @@ export function useRegisterRestaurantViewModel() {
   const [showOwnerConfirmPassword, setShowOwnerConfirmPassword] =
     useState(false);
 
-  const [submitting, setSubmitting] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [result, setResult] = useState<WizardResult | null>(null);
-
   const [ownerSubmitting, setOwnerSubmitting] = useState(false);
   const [ownerError, setOwnerError] = useState<string | null>(null);
+
+  const passwordMismatch =
+    ownerConfirmPassword.length > 0 &&
+    ownerPassword !== ownerConfirmPassword;
 
   const canAdvanceFromStep1 = useMemo(() => {
     return (
       basics.name.trim().length > 0 &&
       basics.ownerName.trim().length > 0 &&
       /\S+@\S+\.\S+/.test(basics.email) &&
-      basics.phone.trim().length > 0
+      basics.phone.trim().length > 0 &&
+      ownerPassword.length >= MIN_PASSWORD_LEN &&
+      ownerPassword === ownerConfirmPassword
     );
-  }, [basics]);
+  }, [basics, ownerPassword, ownerConfirmPassword]);
 
   const canAdvanceFromStep2 = useMemo(
     () => addressState.address.trim().length > 0,
     [addressState]
   );
 
-  const canSubmit = useMemo(() => {
+  const canSubmitBusinessStep = useMemo(() => {
     if (
       businessState.mode === 'multi_table' ||
       businessState.mode === 'hybrid'
@@ -92,144 +114,129 @@ export function useRegisterRestaurantViewModel() {
     return true;
   }, [businessState]);
 
-  const canSubmitOwnerAccount = useMemo(() => {
-    if (ownerPassword.length < MIN_PASSWORD_LEN) return false;
-    if (ownerPassword !== ownerConfirmPassword) return false;
-    return true;
-  }, [ownerPassword, ownerConfirmPassword]);
+  const canSubmitRegistration = useMemo(
+    () =>
+      canAdvanceFromStep1 &&
+      canAdvanceFromStep2 &&
+      canSubmitBusinessStep,
+    [canAdvanceFromStep1, canAdvanceFromStep2, canSubmitBusinessStep]
+  );
+
+  const buildRestaurantDraft = useCallback((): PendingOwnerRestaurantPayload => {
+    return {
+      basics: {
+        name: basics.name.trim(),
+        owner_name: basics.ownerName.trim(),
+        email: basics.email.trim(),
+        phone: basics.phone.trim(),
+      },
+      address: addressState.address.trim(),
+      businessMode: businessState.mode,
+      tablesCount:
+        businessState.mode === 'single_point'
+          ? undefined
+          : businessState.tablesCount,
+      defaultLanguage: normalizeAppLanguage(basics.defaultLanguage),
+    };
+  }, [basics, addressState, businessState]);
 
   const goNext = useCallback(() => {
-    setError(null);
+    setOwnerError(null);
     setStep((s) => {
       if (s === 1 && !canAdvanceFromStep1) return s;
       if (s === 2 && !canAdvanceFromStep2) return s;
       if (s === 3) return s;
-      if (s === 4) return s;
       return (s + 1) as WizardStep;
     });
   }, [canAdvanceFromStep1, canAdvanceFromStep2]);
 
   const goBack = useCallback(() => {
-    setError(null);
-    setStep((s) => {
-      if (s === 4) return s;
-      return s > 1 ? ((s - 1) as WizardStep) : s;
-    });
+    setOwnerError(null);
+    setStep((s) => (s > 1 ? ((s - 1) as WizardStep) : s));
   }, []);
 
-  const submit = useCallback(async () => {
-    if (!canSubmit || submitting) return;
-    setSubmitting(true);
-    setError(null);
-    try {
-      const out = await createRestaurantWithSettingsAndPoints(supabase, {
-        basics: {
-          name: basics.name.trim(),
-          owner_name: basics.ownerName.trim(),
-          email: basics.email.trim(),
-          phone: basics.phone.trim(),
-        },
-        address: addressState.address.trim(),
-        businessMode: businessState.mode,
-        tablesCount:
-          businessState.mode === 'single_point'
-            ? undefined
-            : businessState.tablesCount,
-      });
-      setResult({
-        restaurantId: out.restaurantId,
-        inviteCode: out.inviteCode,
-        email: basics.email.trim(),
-        inviteEmailSent: out.inviteEmailSent,
-        inviteEmailError: out.inviteEmailError,
-      });
-      setOwnerPassword('');
-      setOwnerConfirmPassword('');
+  const submitRegistration =
+    useCallback(async (): Promise<{ ok: boolean; skipVerify?: boolean }> => {
+      if (!canSubmitRegistration || ownerSubmitting) {
+        return { ok: false };
+      }
+      setOwnerSubmitting(true);
       setOwnerError(null);
-      setStep(4);
-    } catch (e) {
-      console.error('useRegisterRestaurantViewModel:submit', e);
-      setError('No se pudo crear el restaurante. Intenta de nuevo.');
-    } finally {
-      setSubmitting(false);
-    }
-  }, [canSubmit, submitting, basics, addressState, businessState]);
+      const email = basics.email.trim();
+      const pwd = ownerPassword;
 
-  const submitOwnerAccount = useCallback(async (): Promise<{
-    ok: boolean;
-    needsEmailConfirm?: boolean;
-  }> => {
-    if (!result || !canSubmitOwnerAccount || ownerSubmitting) {
-      return { ok: false };
-    }
-    setOwnerSubmitting(true);
-    setOwnerError(null);
-    const email = basics.email.trim();
-    const pwd = ownerPassword;
-
-    try {
-      const { data: signUpData, error: signUpErr } = await supabase.auth.signUp(
-        {
-          email,
-          password: pwd,
+      try {
+        const pre = await precheckOwnerSignupEmail(supabase, email);
+        if (!pre.ok) {
+          setOwnerError(pre.message);
+          return { ok: false };
         }
-      );
 
-      if (signUpErr || !signUpData.user) {
-        setOwnerError(signUpErr?.message ?? 'No se pudo crear la cuenta.');
+        const draft = buildRestaurantDraft();
+
+        const { data: signUpData, error: signUpErr } =
+          await supabase.auth.signUp({
+            email,
+            password: pwd,
+            options: {
+              data: {
+                role: 'owner',
+                phone: basics.phone.trim(),
+              },
+            },
+          });
+
+        if (signUpErr || !signUpData.user) {
+          const msg =
+            signUpErr?.message ?? 'No se pudo crear la cuenta.';
+          if (isDuplicateAuthSignupMessage(msg)) {
+            setOwnerError(
+              'Este correo ya está registrado en Auth. Inicia sesión para continuar.'
+            );
+          } else {
+            setOwnerError(msg);
+          }
+          return { ok: false };
+        }
+
+        savePendingOwnerRestaurant(draft);
+
+        const userId = signUpData.user.id;
+        const resolvedEmail =
+          signUpData.user.email ?? email;
+
+        if (signUpData.session) {
+          const fin = await finalizePendingRegistration(
+            supabase,
+            userId,
+            resolvedEmail
+          );
+          if (!fin.ok) {
+            setOwnerError(fin.message);
+            return { ok: false };
+          }
+          return { ok: true, skipVerify: true };
+        }
+
+        savePendingVerifyCredentials(email, pwd);
+        return { ok: true, skipVerify: false };
+      } catch (e) {
+        console.error('submitRegistration', e);
+        clearPendingOwnerRestaurant();
+        clearPendingVerifyCredentials();
+        setOwnerError('Error inesperado al crear la cuenta.');
         return { ok: false };
+      } finally {
+        setOwnerSubmitting(false);
       }
-
-      const { error: profileErr } = await insertWaiterProfile(supabase, {
-        id: signUpData.user.id,
-        email,
-        full_name: basics.ownerName.trim(),
-        employee_number: null,
-        restaurant_id: result.restaurantId,
-        role: 'owner',
-      });
-
-      if (profileErr) {
-        console.error('submitOwnerAccount:profile', profileErr);
-        setOwnerError(
-          'No se pudo vincular el perfil al restaurante. Intenta iniciar sesión desde /login.'
-        );
-        return { ok: false };
-      }
-
-      if (signUpData.session) {
-        return { ok: true };
-      }
-
-      const { data: signInData, error: signInErr } =
-        await supabase.auth.signInWithPassword({
-          email,
-          password: pwd,
-        });
-
-      if (signInErr || !signInData.session) {
-        setOwnerError(
-          'Cuenta creada. Confirma tu correo si te lo pidió Supabase y luego entra en /login.'
-        );
-        return { ok: false, needsEmailConfirm: true };
-      }
-
-      return { ok: true };
-    } catch (e) {
-      console.error('submitOwnerAccount', e);
-      setOwnerError('Error inesperado al crear la cuenta.');
-      return { ok: false };
-    } finally {
-      setOwnerSubmitting(false);
-    }
-  }, [
-    result,
-    canSubmitOwnerAccount,
-    ownerSubmitting,
-    basics.email,
-    basics.ownerName,
-    ownerPassword,
-  ]);
+    }, [
+      canSubmitRegistration,
+      ownerSubmitting,
+      basics.email,
+      basics.phone,
+      ownerPassword,
+      buildRestaurantDraft,
+    ]);
 
   return {
     step,
@@ -248,18 +255,15 @@ export function useRegisterRestaurantViewModel() {
     setShowOwnerPassword,
     showOwnerConfirmPassword,
     setShowOwnerConfirmPassword,
+    passwordMismatch,
     canAdvanceFromStep1,
     canAdvanceFromStep2,
-    canSubmit,
-    canSubmitOwnerAccount,
-    submitting,
-    error,
-    result,
+    canSubmitBusinessStep,
+    canSubmitRegistration,
     ownerSubmitting,
     ownerError,
     goNext,
     goBack,
-    submit,
-    submitOwnerAccount,
+    submitRegistration,
   };
 }

@@ -129,6 +129,11 @@ export function WaiterDashboardView({
     [unread, user?.id]
   );
 
+  const activeTableDisplayName = useMemo(() => {
+    if (!activeTable) return null;
+    return tables.find((t) => t.id === activeTable)?.name ?? null;
+  }, [activeTable, tables]);
+
   const listsPanel = (
     <div className="flex h-full min-h-0 flex-1 flex-col gap-5 overflow-y-auto bg-[#F4F6F8] p-4 md:w-[min(100%,24rem)] md:max-w-[26rem] md:shrink-0 md:border-r md:border-[#E5E7EB] md:bg-[#FFFFFF] lg:p-5">
       <section>
@@ -185,6 +190,7 @@ export function WaiterDashboardView({
     <div className="flex h-full min-h-0 flex-1 flex-col overflow-hidden px-0 pb-0 pt-0 md:p-4">
       <ChatWindow
         activeTableId={activeTable}
+        activeTableName={activeTableDisplayName}
         messages={messages}
         currentUserType="waiter"
         draft={text}
