@@ -1,7 +1,7 @@
 'use client';
 
-import { useEffect, useRef } from 'react';
-import type { Message } from '@/lib/model/types';
+import { useEffect, useRef, type UIEvent } from 'react';
+import type { Message, SessionUser } from '@/lib/model/types';
 import { MessageBubble } from '@/components/chat/MessageBubble';
 
 export interface ChatWindowProps {
@@ -15,6 +15,12 @@ export interface ChatWindowProps {
   onSend: () => void;
   emptyTitle?: string;
   emptySubtitle?: string;
+  typingIndicator?: string | null;
+  onMessagesScroll?: (e: UIEvent<HTMLDivElement>) => void;
+  currentSessionUserId?: string | null;
+  lastReadAt?: string | null;
+  showReadReceipts?: boolean;
+  sessionUsers?: SessionUser[];
 }
 
 const inputClass =
@@ -30,6 +36,12 @@ export function ChatWindow({
   onSend,
   emptyTitle = 'Selecciona una mesa',
   emptySubtitle = 'Abre el chat desde una mesa asignada para ver la conversación.',
+  typingIndicator = null,
+  onMessagesScroll,
+  currentSessionUserId = null,
+  lastReadAt = null,
+  showReadReceipts = false,
+  sessionUsers = [],
 }: ChatWindowProps) {
   const messageEndRef = useRef<HTMLDivElement | null>(null);
 
@@ -68,6 +80,7 @@ export function ChatWindow({
 
       <div
         className="flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto bg-[#E9EEF2] px-3 py-3"
+        onScroll={onMessagesScroll}
       >
         {messages.length === 0 && (
           <p className="py-10 text-center text-sm text-[#6B7280]">
@@ -75,8 +88,19 @@ export function ChatWindow({
           </p>
         )}
         {messages.map((m) => (
-          <MessageBubble key={m.id} message={m} currentUserType={currentUserType} />
+          <MessageBubble
+            key={m.id}
+            message={m}
+            currentUserType={currentUserType}
+            currentSessionUserId={currentSessionUserId}
+            lastReadAt={lastReadAt}
+            showReadReceipts={showReadReceipts}
+            sessionUsers={sessionUsers}
+          />
         ))}
+        {typingIndicator ? (
+          <p className="px-1 text-xs italic text-[#6B7280]">{typingIndicator}</p>
+        ) : null}
         <div ref={messageEndRef} />
       </div>
 

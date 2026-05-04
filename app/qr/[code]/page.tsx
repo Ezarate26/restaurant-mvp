@@ -8,6 +8,7 @@ import { TableChatView } from '@/components/table/TableChatView';
 import { SessionUsersList } from '@/components/session/SessionUsersList';
 import { CustomerPreorderView } from '@/components/customer/CustomerPreorderView';
 import { useCustomerChatViewModel } from '@/lib/viewmodels/useCustomerChatViewModel';
+import { shouldPromptOptionalProfile } from '@/lib/utils/session-user-profile';
 
 export default function QrEntryPage() {
   const params = useParams();
@@ -80,6 +81,8 @@ function CustomerChatBound({
   preferredSessionId: string | null;
   initialLanguageHint: string | null;
 }) {
+  const [optionalProfileEditorOpen, setOptionalProfileEditorOpen] =
+    useState(false);
   const vm = useCustomerChatViewModel({
     servicePointId,
     preferredSessionId,
@@ -122,10 +125,28 @@ function CustomerChatBound({
           onOrderNow={() => void vm.confirmEnterChat()}
           isConfirming={vm.isConfirmingChat}
           languageControlsDisabled={!vm.sessionUser}
+          profileDisplayName={vm.profileDraft.displayName}
+          profileUsername={vm.profileDraft.username}
+          profileEmail={vm.profileDraft.email}
+          onProfileDisplayNameChange={(value) => {
+            vm.setProfileDraft((prev) => ({ ...prev, displayName: value }));
+            vm.setProfileNotice(null);
+          }}
+          onProfileUsernameChange={(value) => {
+            vm.setProfileDraft((prev) => ({ ...prev, username: value }));
+            vm.setProfileNotice(null);
+          }}
+          onProfileEmailChange={(value) => {
+            vm.setProfileDraft((prev) => ({ ...prev, email: value }));
+            vm.setProfileNotice(null);
+          }}
+          profileNotice={vm.profileNotice}
         />
       </>
     );
   }
+
+  const profilePromptActive = shouldPromptOptionalProfile(vm.sessionUser);
 
   return (
     <TableChatView
@@ -133,9 +154,37 @@ function CustomerChatBound({
       headerLabel={vm.headerLabel}
       messages={vm.messages}
       message={vm.text}
-      onMessageChange={vm.setText}
+      onMessageChange={(v) => {
+        vm.setText(v);
+        vm.notifyTyping();
+      }}
       onSend={vm.sendMessage}
       onCallWaiter={vm.callWaiter}
+      currentSessionUserId={vm.sessionUser?.id ?? null}
+      lastReadAt={vm.lastReadAt}
+      typingIndicator={vm.typingIndicator}
+      onMessagesScroll={vm.handleMessagesScroll}
+      profilePromptActive={profilePromptActive}
+      optionalProfileEditorOpen={optionalProfileEditorOpen}
+      onOptionalProfileEditorOpenChange={setOptionalProfileEditorOpen}
+      profileDisplayName={vm.profileDraft.displayName}
+      profileUsername={vm.profileDraft.username}
+      profileEmail={vm.profileDraft.email}
+      onProfileDisplayNameChange={(value) => {
+        vm.setProfileDraft((prev) => ({ ...prev, displayName: value }));
+        vm.setProfileNotice(null);
+      }}
+      onProfileUsernameChange={(value) => {
+        vm.setProfileDraft((prev) => ({ ...prev, username: value }));
+        vm.setProfileNotice(null);
+      }}
+      onProfileEmailChange={(value) => {
+        vm.setProfileDraft((prev) => ({ ...prev, email: value }));
+        vm.setProfileNotice(null);
+      }}
+      profileNotice={vm.profileNotice}
+      onSaveProfile={() => void vm.saveOptionalProfile()}
+      sessionUsers={vm.sessionUsers}
       usersSlot={
         <SessionUsersList
           sessionUsers={vm.sessionUsers}

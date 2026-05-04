@@ -127,6 +127,71 @@ export async function updateSessionUserLanguage(
   return data as SessionUser;
 }
 
+export type SessionUserProfileInput = {
+  display_name: string | null;
+  username: string | null;
+  email: string | null;
+  is_profile_completed: boolean;
+};
+
+export type SessionUserProfileUpdateResult =
+  | { ok: true; sessionUser: SessionUser }
+  | {
+      ok: false;
+      reason: 'username_taken' | 'email_taken' | 'unknown';
+      message: string;
+    };
+
+export async function updateSessionUserProfile(
+  client: SupabaseClient,
+  sessionUserId: string,
+  input: SessionUserProfileInput
+): Promise<SessionUserProfileUpdateResult> {
+  const payload = {
+    display_name: input.display_name,
+    username: input.username,
+    email: input.email,
+    is_profile_completed: input.is_profile_completed,
+  };
+
+  const { data, error } = await client
+    .from('session_users')
+    .update(payload)
+    .eq('id', sessionUserId)
+    .select('*')
+    .single();
+
+  if (!error) {
+    return { ok: true, sessionUser: data as SessionUser };
+  }
+
+  const hint = `${error.code ?? ''} ${error.message ?? ''} ${error.details ?? ''}`
+    .toLowerCase()
+    .trim();
+  const isUnique = error.code === '23505' || hint.includes('duplicate');
+  if (isUnique && hint.includes('username')) {
+    return {
+      ok: false,
+      reason: 'username_taken',
+      message: 'Ese username ya se esta usando. Puedes continuar sin guardarlo.',
+    };
+  }
+  if (isUnique && hint.includes('email')) {
+    return {
+      ok: false,
+      reason: 'email_taken',
+      message: 'Ese email ya se esta usando. Puedes continuar sin guardarlo.',
+    };
+  }
+
+  console.error('updateSessionUserProfile', error);
+  return {
+    ok: false,
+    reason: 'unknown',
+    message: 'No pudimos guardar tus datos ahora. Puedes continuar sin problema.',
+  };
+}
+
 export async function markSessionUserLeft(
   client: SupabaseClient,
   sessionUserId: string
