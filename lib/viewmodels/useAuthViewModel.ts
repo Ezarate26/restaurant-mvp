@@ -4,8 +4,9 @@ import { useCallback, useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
 import {
-  fetchProfileRestaurantId,
+  fetchProfileByUserId,
   insertWaiterProfile,
+  countProfilesByRestaurant,
 } from '@/lib/model/profiles.repository';
 import { fetchRestaurantByInviteCode } from '@/lib/model/restaurants.repository';
 
@@ -22,19 +23,17 @@ export function useAuthViewModel() {
   useEffect(() => {
     const checkSession = async () => {
       const { data } = await supabase.auth.getSession();
-
       if (!data.session) return;
 
       const userId = data.session.user.id;
+      const profile = await fetchProfileByUserId(supabase, userId);
 
-      const restaurantId = await fetchProfileRestaurantId(supabase, userId);
-
-      if (!restaurantId) {
+      if (!profile?.restaurant_id) {
         await supabase.auth.signOut();
         return;
       }
 
-      router.push('/waiter');
+      router.push(profile.role === 'owner' ? '/owner' : '/waiter');
     };
 
     void checkSession();
@@ -57,25 +56,21 @@ export function useAuthViewModel() {
           router.push('/verify');
           return;
         }
-
         alert('Credenciales incorrectas');
         return;
       }
 
       if (!data.user) return;
 
-      const restaurantId = await fetchProfileRestaurantId(
-        supabase,
-        data.user.id
-      );
+      const profile = await fetchProfileByUserId(supabase, data.user.id);
 
-      if (!restaurantId) {
+      if (!profile?.restaurant_id) {
         alert('Usuario sin restaurante');
         await supabase.auth.signOut();
         return;
       }
 
-      router.push('/waiter');
+      router.push(profile.role === 'owner' ? '/owner' : '/waiter');
       return;
     }
 
@@ -91,13 +86,20 @@ export function useAuthViewModel() {
 
     const restaurant = await fetchRestaurantByInviteCode(
       supabase,
-      restaurantCode
+      restaurantCode.trim().toUpperCase()
     );
 
     if (!restaurant) {
       alert('Código de restaurante inválido');
       return;
     }
+
+    // Primer perfil del restaurante => admin; el resto => waiter.
+    const existingCount = await countProfilesByRestaurant(
+      supabase,
+      restaurant.id
+    );
+    const role = existingCount === 0 ? 'admin' : 'waiter';
 
     const { data: signUpData, error } = await supabase.auth.signUp({
       email,
@@ -115,6 +117,7 @@ export function useAuthViewModel() {
       full_name: fullName,
       employee_number: employeeNumber || null,
       restaurant_id: restaurant.id,
+      role,
     });
 
     if (profileError) {

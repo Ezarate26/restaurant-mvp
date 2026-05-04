@@ -4,45 +4,32 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import type { User } from '@supabase/supabase-js';
 import { supabase } from '@/lib/supabase';
-import {
-  fetchMessagesBySession,
-  insertMessage,
-} from '@/lib/model/messages.repository';
+import { fetchRestaurantById } from '@/lib/model/restaurants.repository';
 import { fetchServicePointsByRestaurant } from '@/lib/model/service-points.repository';
-import {
-  assignWaiterToSession,
-  fetchActiveSessionsByRestaurant,
-} from '@/lib/model/service-sessions.repository';
-import {
-  claimAllPendingForSession,
-  fetchPendingServiceRequestsByRestaurant,
-} from '@/lib/model/service-requests.repository';
+import { fetchActiveSessionsByRestaurant } from '@/lib/model/service-sessions.repository';
+import { fetchPendingServiceRequestsByRestaurant } from '@/lib/model/service-requests.repository';
 import { fetchSessionUsersByRestaurant } from '@/lib/model/session-users.repository';
 import {
   fetchProfileByUserId,
   fetchProfilesByIds,
 } from '@/lib/model/profiles.repository';
-import { REALTIME_CHANNEL_RESTAURANT } from '@/lib/model/realtime.constants';
-import { sessionToTableView } from '@/lib/adapters/sessionToTable';
-import { groupServiceRequestsBySession } from '@/lib/adapters/serviceRequestToPending';
+import { REALTIME_CHANNEL_OWNER } from '@/lib/model/realtime.constants';
 import type {
   Message,
   Profile,
+  Restaurant,
   ServicePoint,
   ServiceRequest,
   ServiceSession,
   SessionUser,
 } from '@/lib/model/types';
-import type {
-  PendingTableRequestView,
-  TableView,
-} from '@/lib/adapters/types';
 
-export function useWaiterDashboardViewModel() {
+export function useOwnerDashboardViewModel() {
   const router = useRouter();
 
   const [user, setUser] = useState<User | null>(null);
   const [profile, setProfile] = useState<Profile | null>(null);
+  const [restaurant, setRestaurant] = useState<Restaurant | null>(null);
   const [restaurantId, setRestaurantId] = useState<string | null>(null);
 
   const [servicePoints, setServicePoints] = useState<ServicePoint[]>([]);
@@ -50,24 +37,48 @@ export function useWaiterDashboardViewModel() {
   const [serviceRequests, setServiceRequests] = useState<ServiceRequest[]>([]);
   const [sessionUsers, setSessionUsers] = useState<SessionUser[]>([]);
   const [waiterProfiles, setWaiterProfiles] = useState<Profile[]>([]);
+  const [lastMessageBySession, setLastMessageBySession] = useState<
+    Record<string, Message | null>
+  >({});
 
-  const [activeSessionId, setActiveSessionId] = useState<string | null>(null);
-  const activeSessionIdRef = useRef<string | null>(null);
-
-  const [messages, setMessages] = useState<Message[]>([]);
-  const [text, setText] = useState('');
-
-  const [unread, setUnread] = useState<Record<string, number>>({});
-
-  const userIdRef = useRef<string | null>(null);
-
+  const sessionsRef = useRef<ServiceSession[]>([]);
   useEffect(() => {
-    activeSessionIdRef.current = activeSessionId;
-  }, [activeSessionId]);
+    sessionsRef.current = sessions;
+  }, [sessions]);
 
+  const sessionIdsRef = useRef<Set<string>>(new Set());
   useEffect(() => {
-    userIdRef.current = user?.id ?? null;
-  }, [user?.id]);
+    sessionIdsRef.current = new Set(sessions.map((s) => s.id));
+  }, [sessions]);
+
+  const hydrateLastMessages = useCallback(
+    async (sessionIds: string[], cancelled: boolean) => {
+      if (sessionIds.length === 0) {
+        if (!cancelled) setLastMessageBySession({});
+        return;
+      }
+      const next: Record<string, Message | null> = {};
+      await Promise.all(
+        sessionIds.map(async (sid) => {
+          const { data, error } = await supabase
+            .from('messages')
+            .select('*')
+            .eq('session_id', sid)
+            .order('created_at', { ascending: false })
+            .limit(1)
+            .maybeSingle();
+          if (error) {
+            console.error('owner:lastMessage', error);
+            next[sid] = null;
+          } else {
+            next[sid] = (data as Message) ?? null;
+          }
+        })
+      );
+      if (!cancelled) setLastMessageBySession((prev) => ({ ...prev, ...next }));
+    },
+    []
+  );
 
   useEffect(() => {
     let cancelled = false;
@@ -82,17 +93,21 @@ export function useWaiterDashboardViewModel() {
       setUser(auth.user);
 
       const prof = await fetchProfileByUserId(supabase, auth.user.id);
-      if (!prof || !prof.restaurant_id) {
+      if (!prof?.restaurant_id) {
         if (!cancelled) router.push('/login');
         return;
       }
-      if (prof.role === 'owner') {
-        if (!cancelled) router.push('/owner');
+      if (prof.role !== 'owner') {
+        if (!cancelled) router.push('/waiter');
         return;
       }
       if (cancelled) return;
       setProfile(prof);
       setRestaurantId(prof.restaurant_id);
+
+      const rest = await fetchRestaurantById(supabase, prof.restaurant_id);
+      if (cancelled) return;
+      setRestaurant(rest);
 
       const [points, activeSessions, requests, users] = await Promise.all([
         fetchServicePointsByRestaurant(supabase, prof.restaurant_id),
@@ -116,20 +131,29 @@ export function useWaiterDashboardViewModel() {
       );
       const profiles = await fetchProfilesByIds(supabase, waiterIds);
       if (!cancelled) setWaiterProfiles(profiles);
+
+      await hydrateLastMessages(activeSessions.map((s) => s.id), cancelled);
     };
 
     void init();
-
     return () => {
       cancelled = true;
     };
-  }, [router]);
+  }, [router, hydrateLastMessages]);
 
   useEffect(() => {
     if (!restaurantId) return;
 
+    const refetchUsers = async () => {
+      const users = await fetchSessionUsersByRestaurant(
+        supabase,
+        restaurantId
+      );
+      setSessionUsers(users);
+    };
+
     const channel = supabase
-      .channel(REALTIME_CHANNEL_RESTAURANT)
+      .channel(REALTIME_CHANNEL_OWNER)
       .on(
         'postgres_changes',
         {
@@ -206,33 +230,12 @@ export function useWaiterDashboardViewModel() {
           table: 'session_users',
         },
         (payload) => {
-          if (payload.eventType === 'DELETE') {
-            const old = payload.old as Partial<SessionUser> | undefined;
-            if (!old?.id) return;
-            setSessionUsers((prev) => prev.filter((u) => u.id !== old.id));
-            return;
-          }
-          const row = payload.new as SessionUser | undefined;
-          if (!row?.id) return;
-
-          // Filtra por sesiones del restaurante actual.
-          const known = sessionsRef.current.some((s) => s.id === row.session_id);
-          if (!known) return;
-
-          if (row.status === 'left') {
-            setSessionUsers((prev) => prev.filter((u) => u.id !== row.id));
-            return;
-          }
-
-          setSessionUsers((prev) => {
-            const idx = prev.findIndex((u) => u.id === row.id);
-            if (idx >= 0) {
-              const copy = [...prev];
-              copy[idx] = { ...copy[idx], ...row };
-              return copy;
-            }
-            return [...prev, row];
-          });
+          const row = (payload.new ?? payload.old) as
+            | SessionUser
+            | undefined;
+          if (!row?.session_id) return;
+          if (!sessionIdsRef.current.has(row.session_id)) return;
+          void refetchUsers();
         }
       )
       .on(
@@ -245,30 +248,16 @@ export function useWaiterDashboardViewModel() {
         },
         (payload) => {
           const msg = payload.new as Message;
-          const isActive = msg.session_id === activeSessionIdRef.current;
-
-          if (isActive) {
-            setMessages((prev) => {
-              if (prev.some((m) => m.id === msg.id)) return prev;
-              return [...prev, msg];
-            });
-            if (msg.session_id) {
-              setUnread((prev) => ({ ...prev, [msg.session_id as string]: 0 }));
-            }
-            return;
-          }
-
-          if (msg.sender === 'waiter') return;
           if (!msg.session_id) return;
-
-          // Sólo cuenta unread para sesiones asignadas al usuario actual.
-          const sess = sessionsRef.current.find((s) => s.id === msg.session_id);
-          if (!sess || sess.assigned_to !== userIdRef.current) return;
-
-          setUnread((prev) => ({
-            ...prev,
-            [msg.session_id as string]: (prev[msg.session_id as string] || 0) + 1,
-          }));
+          if (!sessionIdsRef.current.has(msg.session_id)) return;
+          setLastMessageBySession((prev) => {
+            const cur = prev[msg.session_id!];
+            if (cur && cur.created_at && msg.created_at) {
+              if (new Date(cur.created_at) > new Date(msg.created_at))
+                return prev;
+            }
+            return { ...prev, [msg.session_id!]: msg };
+          });
         }
       )
       .subscribe();
@@ -278,12 +267,6 @@ export function useWaiterDashboardViewModel() {
     };
   }, [restaurantId]);
 
-  const sessionsRef = useRef<ServiceSession[]>([]);
-  useEffect(() => {
-    sessionsRef.current = sessions;
-  }, [sessions]);
-
-  // Re-fetch perfiles asignados cuando aparece un mesero nuevo en sesiones.
   useEffect(() => {
     const ids = Array.from(
       new Set(
@@ -311,54 +294,15 @@ export function useWaiterDashboardViewModel() {
     };
   }, [sessions, waiterProfiles]);
 
-  const handleLogout = useCallback(async () => {
-    await supabase.auth.signOut();
-    router.push('/login');
-  }, [router]);
-
-  const openChat = useCallback(async (sessionId: string) => {
-    activeSessionIdRef.current = sessionId;
-    setActiveSessionId(sessionId);
-    setUnread((prev) => ({ ...prev, [sessionId]: 0 }));
-
-    const data = await fetchMessagesBySession(supabase, sessionId);
-    if (activeSessionIdRef.current !== sessionId) return;
-    setMessages(data);
-  }, []);
-
-  const takeTable = useCallback(
-    async (sessionId: string) => {
-      if (!user) return;
-      try {
-        await assignWaiterToSession(supabase, sessionId, user.id);
-        await claimAllPendingForSession(supabase, sessionId, user.id);
-        await openChat(sessionId);
-      } catch (e) {
-        console.error('takeTable', e);
-      }
-    },
-    [user, openChat]
-  );
-
-  const sendMessage = useCallback(async () => {
-    if (!activeSessionId || !text.trim() || !profile) return;
-    const sess = sessionsRef.current.find((s) => s.id === activeSessionId);
-    if (!sess) return;
-
-    try {
-      await insertMessage(supabase, {
-        session_id: activeSessionId,
-        restaurant_id: sess.restaurant_id,
-        sender: 'waiter',
-        text: text.trim(),
-      });
-      setText('');
-    } catch (e) {
-      console.error('sendMessage', e);
-    }
-  }, [activeSessionId, text, profile]);
-
-  // --- Adapters → forma esperada por WaiterDashboardView ---
+  useEffect(() => {
+    if (!restaurantId) return;
+    let cancelled = false;
+    const ids = sessions.map((s) => s.id);
+    void hydrateLastMessages(ids, cancelled);
+    return () => {
+      cancelled = true;
+    };
+  }, [restaurantId, sessions, hydrateLastMessages]);
 
   const profilesById = useMemo(() => {
     const map = new Map<string, Profile>();
@@ -372,47 +316,44 @@ export function useWaiterDashboardViewModel() {
     return map;
   }, [servicePoints]);
 
-  const tables: TableView[] = useMemo(() => {
-    return sessions.map((s) =>
-      sessionToTableView({
-        session: s,
-        point: s.service_point_id ? pointsById.get(s.service_point_id) : null,
-        assignedProfile: s.assigned_to
-          ? profilesById.get(s.assigned_to) ?? null
-          : null,
-      })
-    );
-  }, [sessions, pointsById, profilesById]);
-
-  const pendingRequests: PendingTableRequestView[] = useMemo(
-    () => groupServiceRequestsBySession(serviceRequests),
-    [serviceRequests]
-  );
-
-  /** Conteo de session_users activos por sesión (para futura UI; hoy lo expone read-only). */
-  const sessionUsersCountBySession = useMemo(() => {
-    const m: Record<string, number> = {};
+  const sessionUsersBySession = useMemo(() => {
+    const m: Record<string, SessionUser[]> = {};
     for (const u of sessionUsers) {
-      m[u.session_id] = (m[u.session_id] ?? 0) + 1;
+      if (!m[u.session_id]) m[u.session_id] = [];
+      m[u.session_id].push(u);
     }
     return m;
   }, [sessionUsers]);
 
-  // Mantener firma compatible con el page actual.
+  const pendingBySession = useMemo(() => {
+    const m: Record<string, number> = {};
+    for (const r of serviceRequests) {
+      const sid = r.service_session_id;
+      if (!sid) continue;
+      m[sid] = (m[sid] ?? 0) + 1;
+    }
+    return m;
+  }, [serviceRequests]);
+
+  const handleLogout = useCallback(async () => {
+    await supabase.auth.signOut();
+    router.push('/login');
+  }, [router]);
+
   return {
     user,
     profile,
-    tables,
-    pendingRequests,
-    activeTable: activeSessionId,
-    messages,
-    text,
-    setText,
-    unread,
-    sessionUsersCountBySession,
+    restaurant,
+    restaurantId,
+    servicePoints,
+    sessions,
+    serviceRequests,
+    sessionUsers,
+    sessionUsersBySession,
+    pendingBySession,
+    profilesById,
+    pointsById,
+    lastMessageBySession,
     handleLogout,
-    takeTable,
-    openChat,
-    sendMessage,
   };
 }
