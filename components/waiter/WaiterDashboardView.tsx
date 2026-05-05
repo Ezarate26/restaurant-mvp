@@ -1,11 +1,9 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import type { Message, SessionUser } from '@/lib/model/types';
-import type {
-  PendingTableRequestView as PendingTableRequest,
-  TableView as Table,
-} from '@/lib/adapters/types';
+import type { Message, ServiceSession, SessionUser } from '@/lib/model/types';
+import type { PendingTableRequestView as PendingTableRequest } from '@/lib/adapters/pending-table-request.types';
+import type { TableView as Table } from '@/lib/adapters/table-view.types';
 import type { User } from '@supabase/supabase-js';
 import { BottomTabs } from '@/components/layout/BottomTabs';
 import {
@@ -15,11 +13,16 @@ import {
 import { ChatWindow } from '@/components/chat/ChatWindow';
 import { RequestCard } from '@/components/requests/RequestCard';
 import { TableCard } from '@/components/tables/TableCard';
+import { FinalizeSessionModal } from '@/components/waiter/FinalizeSessionModal';
 import { WaiterHelpPanel } from '@/components/waiter/WaiterHelpPanel';
 
 export interface WaiterDashboardViewProps {
   user: User | null;
+  /** Sesiones activas del restaurante (evita race al tomar mesa vs. `tables` filtradas). */
+  restaurantSessions?: ServiceSession[];
   tables: Table[];
+  /** Nombre legible por `session_id` para solicitudes de mesas que aún no están en `tables`. */
+  pendingSessionLabels?: Record<string, string>;
   pendingRequests: PendingTableRequest[];
   activeTable: string | null;
   messages: Message[];
@@ -27,16 +30,21 @@ export interface WaiterDashboardViewProps {
   onTextChange: (value: string) => void;
   unread: Record<string, number>;
   onLogout: () => void;
-  onTakeTable: (tableId: string) => void;
-  onOpenChat: (tableId: string) => void;
+  onTakeTable: (tableId: string) => void | Promise<void>;
+  onOpenChat: (tableId: string) => void | Promise<void>;
   onSendMessage: () => void;
   typingIndicator?: string | null;
   chatSessionUsers?: SessionUser[];
+  onFinalizeSession?: () => Promise<void>;
+  finalizeSessionBusy?: boolean;
+  waiterToastMessage?: string | null;
 }
 
 export function WaiterDashboardView({
   user,
+  restaurantSessions = [],
   tables,
+  pendingSessionLabels = {},
   pendingRequests,
   activeTable,
   messages,
@@ -49,11 +57,16 @@ export function WaiterDashboardView({
   onSendMessage,
   typingIndicator = null,
   chatSessionUsers = [],
+  onFinalizeSession,
+  finalizeSessionBusy = false,
+  waiterToastMessage = null,
 }: WaiterDashboardViewProps) {
   const [nav, setNav] = useState<WaiterNavSection>('home');
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [vh, setVh] = useState(0);
+  const [finalizeModalOpen, setFinalizeModalOpen] = useState(false);
+  const [takeTableLoading, setTakeTableLoading] = useState(false);
 
   useEffect(() => {
     const updateHeight = () => {
@@ -82,16 +95,21 @@ export function WaiterDashboardView({
   }, [activeTable, tables, unread, user?.id]);
 
   const handleTakeTable = useCallback(
-    (tableId: string) => {
-      onTakeTable(tableId);
-      setNav('chat');
+    async (tableId: string) => {
+      setTakeTableLoading(true);
+      try {
+        await onTakeTable(tableId);
+        setNav('chat');
+      } finally {
+        setTakeTableLoading(false);
+      }
     },
     [onTakeTable]
   );
 
   const handleOpenChat = useCallback(
-    (tableId: string) => {
-      onOpenChat(tableId);
+    async (tableId: string) => {
+      await onOpenChat(tableId);
       setNav('chat');
     },
     [onOpenChat]
@@ -110,20 +128,10 @@ export function WaiterDashboardView({
   /** Una card por mesa (ya agregado en el viewmodel). */
   const requestQueue = pendingRequests;
 
-  const requestTableIds = useMemo(() => {
-    return new Set(requestQueue.map((r) => r.table_id));
-  }, [requestQueue]);
-
-  /** Mesas: solo asignadas o libres sin solicitud activa (excluye fila de solicitudes). */
+  /** Mesas asignadas al mesero actual (el viewmodel ya no envía otras sesiones). */
   const mesasList = useMemo(() => {
-    const assigned = tables
-      .filter((t) => t.assigned_to)
-      .sort((a, b) => a.name.localeCompare(b.name, 'es'));
-    const idle = tables
-      .filter((t) => !t.assigned_to && !requestTableIds.has(t.id))
-      .sort((a, b) => a.name.localeCompare(b.name, 'es'));
-    return [...assigned, ...idle];
-  }, [tables, requestTableIds]);
+    return [...tables].sort((a, b) => a.name.localeCompare(b.name, 'es'));
+  }, [tables]);
 
   const unreadForTable = useCallback(
     (tableId: string, assignedTo: string | null | undefined) => {
@@ -137,6 +145,20 @@ export function WaiterDashboardView({
     if (!activeTable) return null;
     return tables.find((t) => t.id === activeTable)?.name ?? null;
   }, [activeTable, tables]);
+
+  /** Sin mesa activa → volver a inicio (móvil). Al finalizar desde mesero o cliente. */
+  useEffect(() => {
+    if (!activeTable) {
+      setNav((prev) => (prev === 'chat' ? 'home' : prev));
+      setFinalizeModalOpen(false);
+      return;
+    }
+    const sessionStillActive = restaurantSessions.some((s) => s.id === activeTable);
+    if (!sessionStillActive) {
+      setNav('home');
+      setFinalizeModalOpen(false);
+    }
+  }, [activeTable, restaurantSessions]);
 
   const listsPanel = (
     <div className="flex h-full min-h-0 flex-1 flex-col gap-5 overflow-y-auto bg-[#F4F6F8] p-4 md:w-[min(100%,24rem)] md:max-w-[26rem] md:shrink-0 md:border-r md:border-[#E5E7EB] md:bg-[#FFFFFF] lg:p-5">
@@ -152,7 +174,9 @@ export function WaiterDashboardView({
           )}
           {requestQueue.map((r) => {
             const tableLabel =
-              tables.find((t) => t.id === r.table_id)?.name ?? r.table_id;
+              tables.find((t) => t.id === r.table_id)?.name ??
+              pendingSessionLabels[r.table_id] ??
+              r.table_id;
             return (
               <RequestCard
                 key={r.table_id}
@@ -192,6 +216,18 @@ export function WaiterDashboardView({
 
   const chatPanel = (
     <div className="flex h-full min-h-0 flex-1 flex-col overflow-hidden px-0 pb-0 pt-0 md:p-4">
+      {activeTable && onFinalizeSession ? (
+        <div className="shrink-0 border-b border-[#E5E7EB] bg-white px-3 py-2 md:rounded-t-xl md:border md:border-b-0 md:border-[#E5E7EB]">
+          <button
+            type="button"
+            onClick={() => setFinalizeModalOpen(true)}
+            disabled={finalizeSessionBusy}
+            className="w-full rounded-xl border border-[#FECACA] bg-[#FEF2F2] px-3 py-2.5 text-sm font-semibold text-[#B91C1C] shadow-sm transition hover:bg-[#FEE2E2] disabled:opacity-50"
+          >
+            Finalizar atención
+          </button>
+        </div>
+      ) : null}
       <ChatWindow
         activeTableId={activeTable}
         activeTableName={activeTableDisplayName}
@@ -203,11 +239,59 @@ export function WaiterDashboardView({
         typingIndicator={typingIndicator}
         sessionUsers={chatSessionUsers}
       />
+      <FinalizeSessionModal
+        open={finalizeModalOpen}
+        tableName={activeTableDisplayName}
+        sessionUsers={chatSessionUsers}
+        confirming={finalizeSessionBusy}
+        onCancel={() => setFinalizeModalOpen(false)}
+        onConfirm={async () => {
+          try {
+            await onFinalizeSession?.();
+            setFinalizeModalOpen(false);
+          } catch {
+            /* permanece abierto para reintentar */
+          }
+        }}
+      />
     </div>
   );
 
   return (
-    <div className="flex h-screen overflow-hidden bg-[#F4F6F8] text-[#1F2937]">
+    <div
+      className="relative flex h-screen overflow-hidden bg-[#F4F6F8] text-[#1F2937]"
+      aria-busy={takeTableLoading}
+    >
+      {takeTableLoading ? (
+        <div
+          className="fixed inset-0 z-[2000] flex flex-col items-center justify-center bg-white/85 backdrop-blur-[2px]"
+          role="status"
+          aria-live="polite"
+          aria-labelledby="take-table-loading-title"
+        >
+          <div
+            className="h-11 w-11 animate-spin rounded-full border-[3px] border-[#E3F2FD] border-t-[#229ED9]"
+            aria-hidden
+          />
+          <p
+            id="take-table-loading-title"
+            className="mt-5 max-w-xs text-center text-sm font-semibold text-[#1F2937]"
+          >
+            Tomando mesa…
+          </p>
+          <p className="mt-1 max-w-xs text-center text-xs text-[#6B7280]">
+            Un momento
+          </p>
+        </div>
+      ) : null}
+      {waiterToastMessage ? (
+        <div
+          className="pointer-events-none fixed bottom-20 left-1/2 z-[1300] max-w-sm -translate-x-1/2 rounded-xl border border-[#BBF7D0] bg-[#DCFCE7] px-4 py-2.5 text-center text-sm font-medium text-[#166534] shadow-lg md:bottom-8"
+          role="status"
+        >
+          {waiterToastMessage}
+        </div>
+      ) : null}
       <Sidebar
         collapsed={sidebarCollapsed}
         onToggleCollapsed={() => setSidebarCollapsed((c) => !c)}

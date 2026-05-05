@@ -10,7 +10,6 @@ import { fetchActiveSessionsByRestaurant } from '@/lib/model/service-sessions.re
 import { fetchPendingServiceRequestsByRestaurant } from '@/lib/model/service-requests.repository';
 import { fetchSessionUsersByRestaurant } from '@/lib/model/session-users.repository';
 import {
-  fetchProfileByUserId,
   fetchProfilesByIds,
 } from '@/lib/model/profiles.repository';
 import { REALTIME_CHANNEL_OWNER } from '@/lib/model/realtime.constants';
@@ -23,6 +22,11 @@ import type {
   ServiceSession,
   SessionUser,
 } from '@/lib/model/types';
+import { isPresentSessionUser } from '@/lib/utils/session-user-presence';
+import {
+  resolveDashboardGate,
+  signOutAndRedirect,
+} from '@/lib/viewmodels/dashboard-auth.helpers';
 
 export function useOwnerDashboardViewModel() {
   const router = useRouter();
@@ -75,7 +79,11 @@ export function useOwnerDashboardViewModel() {
           }
         })
       );
-      if (!cancelled) setLastMessageBySession((prev) => ({ ...prev, ...next }));
+      if (!cancelled) {
+        const rebuilt: Record<string, Message | null> = {};
+        for (const sid of sessionIds) rebuilt[sid] = next[sid] ?? null;
+        setLastMessageBySession(rebuilt);
+      }
     },
     []
   );
@@ -84,36 +92,29 @@ export function useOwnerDashboardViewModel() {
     let cancelled = false;
 
     const init = async () => {
-      const { data: auth } = await supabase.auth.getUser();
-      if (!auth.user) {
+      const gate = await resolveDashboardGate(supabase, 'owner');
+      if (gate.redirectTo) {
+        router.push(gate.redirectTo);
+        return;
+      }
+      if (!gate.user || !gate.profile?.restaurant_id) {
         router.push('/login');
         return;
       }
       if (cancelled) return;
-      setUser(auth.user);
+      setUser(gate.user);
+      setProfile(gate.profile);
+      setRestaurantId(gate.profile.restaurant_id);
 
-      const prof = await fetchProfileByUserId(supabase, auth.user.id);
-      if (!prof?.restaurant_id) {
-        if (!cancelled) router.push('/login');
-        return;
-      }
-      if (prof.role !== 'owner') {
-        if (!cancelled) router.push('/waiter');
-        return;
-      }
-      if (cancelled) return;
-      setProfile(prof);
-      setRestaurantId(prof.restaurant_id);
-
-      const rest = await fetchRestaurantById(supabase, prof.restaurant_id);
+      const rest = await fetchRestaurantById(supabase, gate.profile.restaurant_id);
       if (cancelled) return;
       setRestaurant(rest);
 
       const [points, activeSessions, requests, users] = await Promise.all([
-        fetchServicePointsByRestaurant(supabase, prof.restaurant_id),
-        fetchActiveSessionsByRestaurant(supabase, prof.restaurant_id),
-        fetchPendingServiceRequestsByRestaurant(supabase, prof.restaurant_id),
-        fetchSessionUsersByRestaurant(supabase, prof.restaurant_id),
+        fetchServicePointsByRestaurant(supabase, gate.profile.restaurant_id),
+        fetchActiveSessionsByRestaurant(supabase, gate.profile.restaurant_id),
+        fetchPendingServiceRequestsByRestaurant(supabase, gate.profile.restaurant_id),
+        fetchSessionUsersByRestaurant(supabase, gate.profile.restaurant_id),
       ]);
 
       if (cancelled) return;
@@ -167,6 +168,9 @@ export function useOwnerDashboardViewModel() {
             const old = payload.old as Partial<ServiceSession> | undefined;
             if (!old?.id) return;
             setSessions((prev) => prev.filter((s) => s.id !== old.id));
+            setSessionUsers((prev) =>
+              prev.filter((u) => u.session_id !== old.id)
+            );
             return;
           }
           const row = payload.new as ServiceSession | undefined;
@@ -174,6 +178,9 @@ export function useOwnerDashboardViewModel() {
 
           if (row.status !== 'active') {
             setSessions((prev) => prev.filter((s) => s.id !== row.id));
+            setSessionUsers((prev) =>
+              prev.filter((u) => u.session_id !== row.id)
+            );
             return;
           }
 
@@ -234,7 +241,12 @@ export function useOwnerDashboardViewModel() {
             | SessionUser
             | undefined;
           if (!row?.session_id) return;
-          if (!sessionIdsRef.current.has(row.session_id)) return;
+          if (!sessionIdsRef.current.has(row.session_id)) {
+            setSessionUsers((prev) =>
+              prev.filter((u) => u.session_id !== row.session_id)
+            );
+            return;
+          }
           void refetchUsers();
         }
       )
@@ -316,28 +328,45 @@ export function useOwnerDashboardViewModel() {
     return map;
   }, [servicePoints]);
 
+  const activeSessionIdSet = useMemo(
+    () => new Set(sessions.map((s) => s.id)),
+    [sessions]
+  );
+
   const sessionUsersBySession = useMemo(() => {
     const m: Record<string, SessionUser[]> = {};
     for (const u of sessionUsers) {
+      if (!activeSessionIdSet.has(u.session_id)) continue;
+      if (!isPresentSessionUser(u)) continue;
       if (!m[u.session_id]) m[u.session_id] = [];
       m[u.session_id].push(u);
     }
     return m;
-  }, [sessionUsers]);
+  }, [sessionUsers, activeSessionIdSet]);
 
   const pendingBySession = useMemo(() => {
     const m: Record<string, number> = {};
     for (const r of serviceRequests) {
       const sid = r.service_session_id;
-      if (!sid) continue;
+      if (!sid || !activeSessionIdSet.has(sid)) continue;
       m[sid] = (m[sid] ?? 0) + 1;
     }
     return m;
-  }, [serviceRequests]);
+  }, [serviceRequests, activeSessionIdSet]);
+
+  /** Sesiones `active` en BD que aún muestran ocupación o trabajo pendiente (evita “fantasmas” sin nadie). */
+  const dashboardSessions = useMemo(() => {
+    return sessions.filter((s) => {
+      if (s.status !== 'active') return false;
+      const users = sessionUsersBySession[s.id] ?? [];
+      const hasPresent = users.length > 0;
+      const pending = (pendingBySession[s.id] ?? 0) > 0;
+      return hasPresent || pending;
+    });
+  }, [sessions, sessionUsersBySession, pendingBySession]);
 
   const handleLogout = useCallback(async () => {
-    await supabase.auth.signOut();
-    router.push('/login');
+    await signOutAndRedirect(supabase, (path) => router.push(path));
   }, [router]);
 
   return {
@@ -347,6 +376,7 @@ export function useOwnerDashboardViewModel() {
     restaurantId,
     servicePoints,
     sessions,
+    dashboardSessions,
     serviceRequests,
     sessionUsers,
     sessionUsersBySession,

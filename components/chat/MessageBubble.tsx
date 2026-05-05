@@ -14,6 +14,11 @@ export interface MessageBubbleProps {
   showReadReceipts?: boolean;
   /** Clientes activos de la sesión (orden por joined_at en el helper). */
   sessionUsers?: SessionUser[] | null;
+  /**
+   * Vista cliente: texto sobre la burbuja del mesero (p. ej. nombre + " · Personal").
+   * Si falta, se usa "Mesero".
+   */
+  waiterIncomingBubbleLabel?: string | null;
 }
 
 const LONG_PRESS_MS = 480;
@@ -154,7 +159,8 @@ function PeerCustomerBubble({
 function parseTime(iso: string | undefined | null): number | null {
   if (!iso) return null;
   const t = Date.parse(iso);
-  return Number.isFinite(t) ? t : null;
+  if (!Number.isFinite(t)) return null;
+  return t;
 }
 
 export function MessageBubble({
@@ -164,6 +170,7 @@ export function MessageBubble({
   lastReadAt,
   showReadReceipts = false,
   sessionUsers = null,
+  waiterIncomingBubbleLabel = null,
 }: MessageBubbleProps) {
   const text = message.text ?? '';
 
@@ -229,7 +236,9 @@ export function MessageBubble({
       : variant === 'waiter_self'
       ? 'Tú'
       : variant === 'waiter_in'
-      ? 'Mesero'
+      ? currentUserType === 'customer' && waiterIncomingBubbleLabel?.trim()
+        ? waiterIncomingBubbleLabel.trim()
+        : 'Mesero'
       : 'Cliente';
 
   const peerHeader =
@@ -241,6 +250,16 @@ export function MessageBubble({
     variant === 'me' || variant === 'waiter_self'
       ? 'text-white/80'
       : 'text-[#6B7280]';
+
+  const staffNamedHeader =
+    variant === 'waiter_in' &&
+    currentUserType === 'customer' &&
+    Boolean(waiterIncomingBubbleLabel?.trim());
+
+  const defaultHeaderClass =
+    'mb-0.5 block text-[10px] font-semibold uppercase tracking-wide';
+  const staffHeaderClass =
+    'mb-0.5 block max-w-[85%] text-[11px] font-semibold leading-snug normal-case tracking-normal';
 
   if (peerHeader) {
     return (
@@ -259,7 +278,7 @@ export function MessageBubble({
     <div className={`flex w-full ${rowAlign}`}>
       <div className={bubbleClass}>
         <span
-          className={`mb-0.5 block text-[10px] font-semibold uppercase tracking-wide ${headerMuted}`}
+          className={`${staffNamedHeader ? staffHeaderClass : defaultHeaderClass} ${headerMuted}`}
         >
           {headerLabel}
         </span>

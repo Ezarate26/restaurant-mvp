@@ -20,6 +20,7 @@ export default function OwnerPage() {
       restaurant={vm.restaurant}
       servicePoints={vm.servicePoints}
       sessions={vm.sessions}
+      dashboardSessions={vm.dashboardSessions}
       serviceRequests={vm.serviceRequests}
       sessionUsers={vm.sessionUsers}
       sessionUsersBySession={vm.sessionUsersBySession}

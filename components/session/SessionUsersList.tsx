@@ -1,31 +1,26 @@
 'use client';
 
 import type { SessionUser } from '@/lib/model/types';
+import { orderedSessionUsers } from '@/lib/utils/chat-peer-label';
+import {
+  sessionUserArrivalIndex,
+  sessionUserDisplayLabel,
+} from '@/lib/utils/session-user-display-name';
 
 export interface SessionUsersListProps {
   sessionUsers: SessionUser[];
-  /** Identificador del cliente actual para resaltar "Tú". */
+  /** Preferir id de `session_user` para marcar "Tú". */
+  currentSessionUserId?: string | null;
+  /** @deprecated usar currentSessionUserId */
   currentUserIdentifier?: string | null;
-}
-
-function getDisplayName(u: SessionUser, idx: number): string {
-  return (
-    u.display_name?.trim() ||
-    u.username?.trim() ||
-    `Usuario ${idx + 1}`
-  );
 }
 
 export function SessionUsersList({
   sessionUsers,
-  currentUserIdentifier,
+  currentSessionUserId = null,
+  currentUserIdentifier = null,
 }: SessionUsersListProps) {
-  const orderedUsers = [...sessionUsers].sort((a, b) => {
-    const aTs = Date.parse(a.joined_at ?? '');
-    const bTs = Date.parse(b.joined_at ?? '');
-    if (Number.isFinite(aTs) && Number.isFinite(bTs)) return aTs - bTs;
-    return 0;
-  });
+  const orderedUsers = orderedSessionUsers(sessionUsers);
   const total = orderedUsers.length;
 
   if (total === 0) {
@@ -48,10 +43,13 @@ export function SessionUsersList({
       </div>
 
       <ul className="mt-1.5 flex flex-wrap items-center gap-1.5">
-        {orderedUsers.map((u, i) => {
+        {orderedUsers.map((u) => {
+          const idx = sessionUserArrivalIndex(sessionUsers, u.id) ?? 1;
+          const label = sessionUserDisplayLabel(u, idx);
           const isMe =
-            currentUserIdentifier != null &&
-            u.user_identifier === currentUserIdentifier;
+            (currentSessionUserId != null && u.id === currentSessionUserId) ||
+            (currentUserIdentifier != null &&
+              u.user_identifier === currentUserIdentifier);
           return (
             <li
               key={u.id}
@@ -61,7 +59,7 @@ export function SessionUsersList({
                   : 'bg-[#F4F6F8] text-[#1F2937]'
               }`}
             >
-              {isMe ? 'Tú' : getDisplayName(u, i)}
+              {isMe ? 'Tú' : label}
             </li>
           );
         })}

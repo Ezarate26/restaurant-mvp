@@ -1,4 +1,5 @@
 import type { Message, SessionUser } from '@/lib/model/types';
+import { isTechnicalUserIdentifier } from '@/lib/utils/user-identifier';
 
 type JoinRow = {
   user_identifier: string | null;
@@ -58,15 +59,18 @@ export function customerPeerHeaderLabels(
     su?.display_name?.trim() || join?.display_name?.trim() || '';
   const username =
     su?.username?.trim() || join?.username?.trim() || '';
+  const userIdent =
+    su?.user_identifier?.trim() || join?.user_identifier?.trim() || '';
   const indexMap = sessionUserOrderIndex(sessionUsers);
-  const index =
-    sid && indexMap.has(sid) ? (indexMap.get(sid) as number) : null;
+  const index = sid ? (indexMap.get(sid) ?? null) : null;
 
   let shortLabel = '';
   if (username) {
     shortLabel = truncate(username, 22);
   } else if (displayName) {
     shortLabel = truncate(displayName, 22);
+  } else if (userIdent && !isTechnicalUserIdentifier(userIdent)) {
+    shortLabel = truncate(userIdent, 22);
   } else if (index != null) {
     shortLabel = `Usuario ${index}`;
   } else {

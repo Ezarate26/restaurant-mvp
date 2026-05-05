@@ -1,20 +1,50 @@
 'use client';
 
-import { useEffect, useState } from 'react';
-import { useParams, useSearchParams } from 'next/navigation';
+import { useCallback, useEffect, useState } from 'react';
+import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
 import { resolveQrCode } from '@/lib/model/qr-entries.repository';
 import { TableChatView } from '@/components/table/TableChatView';
 import { SessionUsersList } from '@/components/session/SessionUsersList';
 import { CustomerPreorderView } from '@/components/customer/CustomerPreorderView';
+import { CustomerLoginModal } from '@/components/customer/CustomerLoginModal';
 import { useCustomerChatViewModel } from '@/lib/viewmodels/useCustomerChatViewModel';
-import { shouldPromptOptionalProfile } from '@/lib/utils/session-user-profile';
+
+type StatusBannerProps = {
+  kind: 'error' | 'success';
+  message: string;
+};
+
+function StatusBanner({ kind, message }: StatusBannerProps) {
+  const base =
+    kind === 'error'
+      ? 'fixed inset-x-0 top-0 z-10 border-b border-amber-200 bg-amber-50 px-4 py-2 text-center text-sm text-amber-900'
+      : 'fixed inset-x-0 top-0 z-[90] border-b border-emerald-200 bg-emerald-50 px-4 py-2 text-center text-sm text-emerald-900';
+  const role = kind === 'error' ? 'alert' : 'status';
+  return (
+    <div className={base} role={role}>
+      {message}
+    </div>
+  );
+}
+
+function CenterNotice({ message, detail }: { message: string; detail?: string }) {
+  return (
+    <div className="grid min-h-screen place-items-center bg-[#F4F6F8] px-6 text-center">
+      <div className="rounded-2xl border border-[#E5E7EB] bg-white px-6 py-8 shadow-sm">
+        <p className="text-base font-semibold text-[#1F2937]">{message}</p>
+        {detail && <p className="mt-2 text-sm text-[#6B7280]">{detail}</p>}
+      </div>
+    </div>
+  );
+}
 
 export default function QrEntryPage() {
   const params = useParams();
   const searchParams = useSearchParams();
   const code = (params.code as string) ?? '';
   const lang = searchParams.get('lang');
+  const autoOpenChatAfterLoad = searchParams.get('open_chat') === '1';
 
   const [servicePointId, setServicePointId] = useState<string | null>(null);
   const [preferredSessionId, setPreferredSessionId] = useState<string | null>(
@@ -35,7 +65,7 @@ export default function QrEntryPage() {
         return;
       }
       setServicePointId(resolved.servicePoint.id);
-      setPreferredSessionId(resolved.sessionId ?? null);
+      setPreferredSessionId(null);
     })();
     return () => {
       cancelled = true;
@@ -44,14 +74,10 @@ export default function QrEntryPage() {
 
   if (resolveError) {
     return (
-      <div className="grid min-h-screen place-items-center bg-[#F4F6F8] px-6 text-center">
-        <div className="rounded-2xl border border-[#E5E7EB] bg-white px-6 py-8 shadow-sm">
-          <p className="text-base font-semibold text-[#1F2937]">{resolveError}</p>
-          <p className="mt-2 text-sm text-[#6B7280]">
-            Pide a un mesero que te dé el código correcto.
-          </p>
-        </div>
-      </div>
+      <CenterNotice
+        message={resolveError}
+        detail="Pide a un mesero que te dé el código correcto."
+      />
     );
   }
 
@@ -65,132 +91,143 @@ export default function QrEntryPage() {
 
   return (
     <CustomerChatBound
+      qrCode={code}
       servicePointId={servicePointId}
       preferredSessionId={preferredSessionId}
       initialLanguageHint={lang}
+      autoOpenChatAfterLoad={autoOpenChatAfterLoad}
     />
   );
 }
 
 function CustomerChatBound({
+  qrCode,
   servicePointId,
   preferredSessionId,
   initialLanguageHint,
+  autoOpenChatAfterLoad = false,
 }: {
+  qrCode: string;
   servicePointId: string;
   preferredSessionId: string | null;
   initialLanguageHint: string | null;
+  autoOpenChatAfterLoad?: boolean;
 }) {
-  const [optionalProfileEditorOpen, setOptionalProfileEditorOpen] =
-    useState(false);
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const [customerLoginOpen, setCustomerLoginOpen] = useState(false);
+  const autoOpenLoginAfterLoad = searchParams.get('open_login') === '1';
+  const loginEmail = searchParams.get('login_email')?.trim() ?? '';
+  const loginIntroMessage =
+    (autoOpenLoginAfterLoad && 'Cuenta creada correctamente. Inicia sesión para continuar.') ||
+    null;
+
+  const createAccountHref = (() => {
+    const q = new URLSearchParams();
+    q.set('return_point', servicePointId);
+    q.set('return_qr', qrCode);
+    if (preferredSessionId?.trim()) {
+      q.set('return_session', preferredSessionId.trim());
+    }
+    return `/complete-profile?${q.toString()}`;
+  })();
+
+  const clearCustomerUrlAfterSessionEnd = useCallback(() => {
+    const l = searchParams.get('lang');
+    const base = `/qr/${encodeURIComponent(qrCode)}`;
+    router.replace(
+      l ? `${base}?lang=${encodeURIComponent(l)}` : base
+    );
+  }, [router, qrCode, searchParams]);
+
   const vm = useCustomerChatViewModel({
     servicePointId,
     preferredSessionId,
     initialLanguageHint,
+    autoOpenChatAfterLoad,
+    clearCustomerUrlAfterSessionEnd,
   });
 
   if (vm.isLoading) {
     return (
-      <div className="grid min-h-screen place-items-center bg-[#F4F6F8] text-sm text-[#6B7280]">
-        Preparando tu visita…
-      </div>
+      <CenterNotice message="Preparando tu visita…" />
     );
   }
 
-  if (vm.error && !vm.session) {
-    return (
-      <div className="grid min-h-screen place-items-center bg-[#F4F6F8] px-6 text-center">
-        <div className="rounded-2xl border border-[#E5E7EB] bg-white px-6 py-8 shadow-sm">
-          <p className="text-base font-semibold text-[#1F2937]">{vm.error}</p>
-        </div>
-      </div>
-    );
+  if (vm.error && !vm.point) {
+    return <CenterNotice message={vm.error} />;
   }
 
   if (!vm.chatActive) {
     return (
       <>
-        {vm.error && (
-          <div
-            className="fixed inset-x-0 top-0 z-10 border-b border-amber-200 bg-amber-50 px-4 py-2 text-center text-sm text-amber-900"
-            role="alert"
-          >
-            {vm.error}
-          </div>
-        )}
+        {vm.error && <StatusBanner kind="error" message={vm.error} />}
+        {vm.profileNotice && <StatusBanner kind="success" message={vm.profileNotice} />}
         <CustomerPreorderView
           placeName={vm.headerLabel}
           selectedLanguage={vm.selectedLanguage}
           onSelectLanguage={vm.selectLanguage}
           onOrderNow={() => void vm.confirmEnterChat()}
           isConfirming={vm.isConfirmingChat}
-          languageControlsDisabled={!vm.sessionUser}
-          profileDisplayName={vm.profileDraft.displayName}
-          profileUsername={vm.profileDraft.username}
-          profileEmail={vm.profileDraft.email}
-          onProfileDisplayNameChange={(value) => {
-            vm.setProfileDraft((prev) => ({ ...prev, displayName: value }));
-            vm.setProfileNotice(null);
-          }}
-          onProfileUsernameChange={(value) => {
-            vm.setProfileDraft((prev) => ({ ...prev, username: value }));
-            vm.setProfileNotice(null);
-          }}
-          onProfileEmailChange={(value) => {
-            vm.setProfileDraft((prev) => ({ ...prev, email: value }));
-            vm.setProfileNotice(null);
-          }}
-          profileNotice={vm.profileNotice}
+          languageControlsDisabled={!vm.point}
+          createAccountHref={createAccountHref}
+          onSubmitLogin={(email, password) =>
+            vm.loginCustomerAccount(email, password)
+          }
+          loginSubmitBusy={vm.loginBusy}
+          autoOpenLogin={autoOpenLoginAfterLoad}
+          loginInitialEmail={loginEmail}
+          loginIntroMessage={loginIntroMessage}
         />
       </>
     );
   }
 
-  const profilePromptActive = shouldPromptOptionalProfile(vm.sessionUser);
-
   return (
-    <TableChatView
-      tableId={vm.session?.id ?? servicePointId}
-      headerLabel={vm.headerLabel}
-      messages={vm.messages}
-      message={vm.text}
-      onMessageChange={(v) => {
-        vm.setText(v);
-        vm.notifyTyping();
-      }}
-      onSend={vm.sendMessage}
-      onCallWaiter={vm.callWaiter}
-      currentSessionUserId={vm.sessionUser?.id ?? null}
-      lastReadAt={vm.lastReadAt}
-      typingIndicator={vm.typingIndicator}
-      onMessagesScroll={vm.handleMessagesScroll}
-      profilePromptActive={profilePromptActive}
-      optionalProfileEditorOpen={optionalProfileEditorOpen}
-      onOptionalProfileEditorOpenChange={setOptionalProfileEditorOpen}
-      profileDisplayName={vm.profileDraft.displayName}
-      profileUsername={vm.profileDraft.username}
-      profileEmail={vm.profileDraft.email}
-      onProfileDisplayNameChange={(value) => {
-        vm.setProfileDraft((prev) => ({ ...prev, displayName: value }));
-        vm.setProfileNotice(null);
-      }}
-      onProfileUsernameChange={(value) => {
-        vm.setProfileDraft((prev) => ({ ...prev, username: value }));
-        vm.setProfileNotice(null);
-      }}
-      onProfileEmailChange={(value) => {
-        vm.setProfileDraft((prev) => ({ ...prev, email: value }));
-        vm.setProfileNotice(null);
-      }}
-      profileNotice={vm.profileNotice}
-      onSaveProfile={() => void vm.saveOptionalProfile()}
-      sessionUsers={vm.sessionUsers}
-      usersSlot={
-        <SessionUsersList
-          sessionUsers={vm.sessionUsers}
-          currentUserIdentifier={vm.sessionUser?.user_identifier ?? null}
-        />
-      }
-    />
+    <>
+      {vm.profileNotice && <StatusBanner kind="success" message={vm.profileNotice} />}
+      <TableChatView
+        tableId={vm.session?.id ?? servicePointId}
+        headerLabel={vm.headerLabel}
+        messages={vm.messages}
+        message={vm.text}
+        onMessageChange={(v) => {
+          vm.setText(v);
+          vm.notifyTyping();
+        }}
+        onSend={vm.sendMessage}
+        onCallWaiter={vm.callWaiter}
+        composerDisabled={vm.chatComposerDisabled}
+        closureBanner={vm.closureBanner}
+        onLeaveChat={vm.closeSessionForEveryone}
+        leaveChatBusy={vm.leaveChatBusy}
+        showStartNewSession={vm.showStartNewSession}
+        newSessionBusy={vm.newSessionBusy}
+        onStartNewSession={() => void vm.startNewSessionAfterClose()}
+        currentSessionUserId={vm.sessionUser?.id ?? null}
+        lastReadAt={vm.lastReadAt}
+        typingIndicator={vm.typingIndicator}
+        onMessagesScroll={vm.handleMessagesScroll}
+        sessionUsers={vm.sessionUsers}
+        waiterIncomingBubbleLabel={vm.assignedStaffHeader}
+        usersSlot={
+          <SessionUsersList
+            sessionUsers={vm.sessionUsers}
+            currentSessionUserId={vm.sessionUser?.id ?? null}
+          />
+        }
+      />
+      <CustomerLoginModal
+        open={customerLoginOpen}
+        onOpenChange={(open) => {
+          setCustomerLoginOpen(open);
+        }}
+        introMessage={null}
+        busy={vm.loginBusy}
+        onSubmit={(email, password) =>
+          vm.loginCustomerAccount(email, password)
+        }
+      />
+    </>
   );
 }

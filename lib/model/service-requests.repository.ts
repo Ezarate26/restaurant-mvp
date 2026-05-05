@@ -69,3 +69,23 @@ export async function claimAllPendingForSession(
     throw error;
   }
 }
+
+/**
+ * Cierra solicitudes aún `pending` de una sesión (p. ej. al finalizar el chat).
+ * Así mesero y owner no ven “llamar mesero” colgado para una mesa ya cerrada.
+ */
+export async function resolvePendingServiceRequestsForSession(
+  client: SupabaseClient,
+  sessionId: string
+): Promise<void> {
+  const { error } = await client
+    .from('service_requests')
+    .update({ status: 'resolved' })
+    .eq('service_session_id', sessionId)
+    .eq('status', 'pending');
+
+  if (error) {
+    console.error('resolvePendingServiceRequestsForSession', error);
+    throw error;
+  }
+}

@@ -3,7 +3,7 @@ import type {
   ServicePoint,
   ServiceSession,
 } from '@/lib/model/types';
-import type { TableView } from './types';
+import type { TableView } from './table-view.types';
 
 export interface SessionToTableArgs {
   session: ServiceSession;
