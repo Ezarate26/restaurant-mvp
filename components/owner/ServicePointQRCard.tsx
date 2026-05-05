@@ -9,10 +9,14 @@ export type PointOperationalStatus = 'idle' | 'waiting' | 'in_service';
 function resolvePointStatus(args: {
   point: ServicePoint;
   sessions: ServiceSession[];
+  /** Solo cuenta participantes con presencia real (active + sin left_at). */
+  presentUserCount: number;
 }): PointOperationalStatus {
   const sid = args.point.id;
-  const active = args.sessions.filter((s) => s.service_point_id === sid);
-  if (active.length === 0) return 'idle';
+  const active = args.sessions.filter(
+    (s) => s.service_point_id === sid && s.status === 'active'
+  );
+  if (active.length === 0 || args.presentUserCount === 0) return 'idle';
   const anyAssigned = active.some((s) => Boolean(s.assigned_to));
   if (anyAssigned) return 'in_service';
   return 'waiting';
@@ -21,7 +25,7 @@ function resolvePointStatus(args: {
 function statusLabel(s: PointOperationalStatus): string {
   switch (s) {
     case 'idle':
-      return 'Listo';
+      return 'Mesa disponible';
     case 'waiting':
       return 'En espera';
     case 'in_service':
@@ -58,7 +62,11 @@ export function ServicePointQRCard({
   const qrImg = `https://api.qrserver.com/v1/create-qr-code/?size=120x120&data=${encodeURIComponent(
     url
   )}`;
-  const op = resolvePointStatus({ point, sessions });
+  const op = resolvePointStatus({
+    point,
+    sessions,
+    presentUserCount: usersForPoint.length,
+  });
   const activeFlag = point.is_active;
 
   return (

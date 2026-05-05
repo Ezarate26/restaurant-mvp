@@ -1,4 +1,6 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
+import { resolvePendingServiceRequestsForSession } from './service-requests.repository';
+import { markAllActiveSessionUsersLeft } from './session-users.repository';
 import type { ServiceSession, ServicePoint } from './types';
 
 export async function fetchActiveSessionsByRestaurant(
@@ -123,6 +125,17 @@ export async function closeServiceSession(
     console.error('closeServiceSession', error);
     throw error;
   }
+}
+
+/** Cierra la sesión, marca participantes como `left` y resuelve solicitudes `pending`. */
+export async function closeSessionForEveryone(
+  client: SupabaseClient,
+  sessionId: string,
+  reason?: string | null
+): Promise<void> {
+  await closeServiceSession(client, sessionId, reason ?? 'completed');
+  await markAllActiveSessionUsersLeft(client, sessionId);
+  await resolvePendingServiceRequestsForSession(client, sessionId);
 }
 
 export async function touchSessionActivity(

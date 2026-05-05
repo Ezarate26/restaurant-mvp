@@ -17,11 +17,21 @@ import {
   fetchActiveSessionUsersBySession,
   upsertSessionUserByIdentifier,
   updateSessionUserLanguage,
-  updateSessionUserProfile,
 } from '@/lib/model/session-users.repository';
 import { insertServiceRequest } from '@/lib/model/service-requests.repository';
 import { REALTIME_CHANNEL_SESSION } from '@/lib/model/realtime.constants';
 import { getOrCreateCustomerIdentifier } from '@/lib/utils/customerIdentifier';
+import { fetchProfileByUserId } from '@/lib/model/profiles.repository';
+import {
+  sessionUserArrivalIndex,
+  staffBubbleHeaderFromFullName,
+} from '@/lib/utils/session-user-display-name';
+import { isTechnicalUserIdentifier, paddedUsuarioOrder } from '@/lib/utils/user-identifier';
+import {
+  loadChatSnapshot,
+  resolvePreferredLanguage,
+  type LoginCustomerResponse,
+} from '@/lib/viewmodels/customer-chat.helpers';
 import type {
   Message,
   ServicePoint,
@@ -39,18 +49,34 @@ export interface UseCustomerChatViewModelArgs {
   servicePointId: string;
   initialLanguageHint?: string | null;
   preferredSessionId?: string | null;
+  /** Query `open_chat=1` tras completar registro: inicia sesión + entra al chat. */
+  autoOpenChatAfterLoad?: boolean;
+  /**
+   * Tras cerrar/finalizar conversación: quitar `session` y `open_chat` de la URL
+   * para no reutilizar una sesión cerrada ni crear otra al volver al “inicio” QR/mesa.
+   */
+  clearCustomerUrlAfterSessionEnd?: () => void;
 }
 
-export interface OptionalProfileDraft {
-  displayName: string;
-  username: string;
-  email: string;
+function stripOpenChatQueryParam(): void {
+  if (typeof window === 'undefined') return;
+  try {
+    const u = new URL(window.location.href);
+    if (!u.searchParams.has('open_chat')) return;
+    u.searchParams.delete('open_chat');
+    const next = `${u.pathname}${u.search}${u.hash}`;
+    window.history.replaceState({}, '', next);
+  } catch {
+    /* noop */
+  }
 }
 
 export function useCustomerChatViewModel({
   servicePointId,
   initialLanguageHint,
   preferredSessionId,
+  autoOpenChatAfterLoad = false,
+  clearCustomerUrlAfterSessionEnd,
 }: UseCustomerChatViewModelArgs) {
   const [point, setPoint] = useState<ServicePoint | null>(null);
   const [session, setSession] = useState<ServiceSession | null>(null);
@@ -63,12 +89,14 @@ export function useCustomerChatViewModel({
   const [chatActive, setChatActive] = useState(false);
   const [selectedLanguage, setSelectedLanguage] = useState<string | null>(null);
   const [isConfirmingChat, setIsConfirmingChat] = useState(false);
-  const [profileDraft, setProfileDraft] = useState<OptionalProfileDraft>({
-    displayName: '',
-    username: '',
-    email: '',
-  });
   const [profileNotice, setProfileNotice] = useState<string | null>(null);
+  const [leaveChatBusy, setLeaveChatBusy] = useState(false);
+  const [newSessionBusy, setNewSessionBusy] = useState(false);
+  const [loginBusy, setLoginBusy] = useState(false);
+  /** Encabezado en burbujas del mesero (vista cliente), desde `profiles.full_name`. */
+  const [assignedStaffHeader, setAssignedStaffHeader] = useState<string | null>(
+    null
+  );
 
   const [lastReadAt, setLastReadAt] = useState<string | null>(null);
   const [typingIndicator, setTypingIndicator] = useState<string | null>(null);
@@ -80,6 +108,8 @@ export function useCustomerChatViewModel({
   );
   const typingHideRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const lastTypingSentRef = useRef(0);
+  const assignedStaffHeaderRef = useRef<string | null>(null);
+  const autoOpenChatAttemptedRef = useRef(false);
 
   useEffect(() => {
     sessionIdRef.current = session?.id ?? null;
@@ -88,6 +118,38 @@ export function useCustomerChatViewModel({
   useEffect(() => {
     sessionUsersRef.current = sessionUsers;
   }, [sessionUsers]);
+
+  /** Aviso tipo banner (p. ej. correo enviado): desaparece solo a los 5 s. */
+  useEffect(() => {
+    if (!profileNotice?.trim()) return;
+    const id = window.setTimeout(() => setProfileNotice(null), 5000);
+    return () => window.clearTimeout(id);
+  }, [profileNotice]);
+
+  useEffect(() => {
+    assignedStaffHeaderRef.current = assignedStaffHeader;
+  }, [assignedStaffHeader]);
+
+  useEffect(() => {
+    const aid = session?.assigned_to?.trim();
+    if (!aid) {
+      setAssignedStaffHeader(null);
+      return;
+    }
+    let cancelled = false;
+    void (async () => {
+      try {
+        const p = await fetchProfileByUserId(supabase, aid);
+        if (cancelled) return;
+        setAssignedStaffHeader(staffBubbleHeaderFromFullName(p?.full_name));
+      } catch {
+        if (!cancelled) setAssignedStaffHeader(null);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [session?.assigned_to]);
 
   const flashTypingLine = useCallback((label: string) => {
     if (typingHideRef.current) clearTimeout(typingHideRef.current);
@@ -98,7 +160,10 @@ export function useCustomerChatViewModel({
     }, 2600);
   }, []);
 
-  /** Fase 1: punto + sesión + session_user (sin mensajes ni realtime de chat). */
+  /**
+   * Solo cargamos el punto de servicio. La fila `service_sessions` y `session_users`
+   * se crean al habilitar el chat (Ordenar ahora, login o datos que abren conversación).
+   */
   useEffect(() => {
     let cancelled = false;
     setIsLoading(true);
@@ -106,7 +171,8 @@ export function useCustomerChatViewModel({
     setChatActive(false);
     setMessages([]);
     setSessionUsers([]);
-    setSelectedLanguage(null);
+    setSession(null);
+    setSessionUser(null);
     setLastReadAt(null);
     setTypingIndicator(null);
 
@@ -120,44 +186,8 @@ export function useCustomerChatViewModel({
           return;
         }
         setPoint(sp);
-
-        let sess: ServiceSession | null = null;
-        if (preferredSessionId) {
-          const pref = await fetchServiceSessionById(
-            supabase,
-            preferredSessionId
-          );
-          if (
-            pref &&
-            pref.status === 'active' &&
-            pref.service_point_id === sp.id
-          ) {
-            sess = pref;
-          }
-        }
-        if (!sess) {
-          sess = await getOrCreateActiveSessionForPoint(supabase, sp, null);
-        }
-        if (cancelled) return;
-        setSession(sess);
-
-        const identifier = getOrCreateCustomerIdentifier();
-        const su = await upsertSessionUserByIdentifier(supabase, {
-          sessionId: sess.id,
-          userIdentifier: identifier,
-          language: null,
-        });
-        if (cancelled) return;
-        setSessionUser(su);
-        setProfileDraft({
-          displayName: su.display_name?.trim() ?? '',
-          username: su.username?.trim() ?? '',
-          email: su.email?.trim() ?? '',
-        });
-
-        const fromDb = su.language?.trim() || null;
         const hint = initialLanguageHint?.trim() || null;
-        setSelectedLanguage(fromDb ?? hint ?? null);
+        setSelectedLanguage(hint || 'es');
 
         setIsLoading(false);
       } catch (e) {
@@ -172,50 +202,11 @@ export function useCustomerChatViewModel({
     return () => {
       cancelled = true;
     };
-  }, [servicePointId, preferredSessionId, initialLanguageHint]);
+  }, [servicePointId, initialLanguageHint]);
 
-  const hasOptionalProfileInput = useMemo(() => {
-    return Boolean(
-      profileDraft.displayName.trim() ||
-        profileDraft.username.trim() ||
-        profileDraft.email.trim()
-    );
-  }, [profileDraft.displayName, profileDraft.email, profileDraft.username]);
-
-  const saveOptionalProfile = useCallback(async () => {
-    const suId = sessionUser?.id;
-    if (!suId) return { saved: false };
-
-    const displayName = profileDraft.displayName.trim();
-    const username = profileDraft.username.trim();
-    const email = profileDraft.email.trim();
-    const hasInput = Boolean(displayName || username || email);
-    if (!hasInput) {
-      setProfileNotice(null);
-      return { saved: false };
-    }
-
-    const result = await updateSessionUserProfile(supabase, suId, {
-      display_name: displayName || null,
-      username: username || null,
-      email: email || null,
-      is_profile_completed: true,
-    });
-
-    if (result.ok) {
-      setSessionUser(result.sessionUser);
-      setProfileDraft({
-        displayName: result.sessionUser.display_name?.trim() ?? '',
-        username: result.sessionUser.username?.trim() ?? '',
-        email: result.sessionUser.email?.trim() ?? '',
-      });
-      setProfileNotice(null);
-      return { saved: true };
-    }
-
-    setProfileNotice(result.message);
-    return { saved: false, reason: result.reason };
-  }, [profileDraft.displayName, profileDraft.email, profileDraft.username, sessionUser?.id]);
+  useEffect(() => {
+    autoOpenChatAttemptedRef.current = false;
+  }, [servicePointId, preferredSessionId, autoOpenChatAfterLoad]);
 
   const selectLanguage = useCallback(async (code: string) => {
     setSelectedLanguage(code);
@@ -229,27 +220,72 @@ export function useCustomerChatViewModel({
     }
   }, [sessionUser?.id]);
 
+  const ensureSessionAndParticipant = useCallback(async (): Promise<{
+    session: ServiceSession;
+    sessionUser: SessionUser;
+  }> => {
+    if (!point) {
+      throw new Error('Punto no disponible');
+    }
+    const lang =
+      selectedLanguage?.trim() ||
+      initialLanguageHint?.trim() ||
+      'es';
+
+    let sess: ServiceSession | null = null;
+    if (preferredSessionId?.trim()) {
+      const pref = await fetchServiceSessionById(
+        supabase,
+        preferredSessionId.trim()
+      );
+      if (
+        pref &&
+        pref.status === 'active' &&
+        pref.service_point_id === point.id
+      ) {
+        sess = pref;
+      }
+    }
+    if (!sess) {
+      sess = await getOrCreateActiveSessionForPoint(supabase, point, lang);
+    }
+
+    const identifier = getOrCreateCustomerIdentifier();
+    const su = await upsertSessionUserByIdentifier(supabase, {
+      sessionId: sess.id,
+      userIdentifier: identifier,
+      language: lang,
+    });
+
+    setSession(sess);
+    setSessionUser(su);
+    setSelectedLanguage(lang);
+
+    return { session: sess, sessionUser: su };
+  }, [point, preferredSessionId, selectedLanguage, initialLanguageHint]);
+
   const confirmEnterChat = useCallback(async () => {
-    if (!selectedLanguage?.trim() || !session) return;
+    if (!point) {
+      setError('Punto no disponible');
+      return;
+    }
+    const lang =
+      selectedLanguage?.trim() ||
+      initialLanguageHint?.trim() ||
+      'es';
     setIsConfirmingChat(true);
     setError(null);
+    setProfileNotice(null);
     try {
-      await saveOptionalProfile();
-      if (sessionUser?.id) {
-        await updateSessionUserLanguage(
-          supabase,
-          sessionUser.id,
-          selectedLanguage.trim()
-        );
-      }
-      const [msgs, users] = await Promise.all([
-        fetchMessagesBySession(supabase, session.id),
-        fetchActiveSessionUsersBySession(supabase, session.id),
-      ]);
-      setMessages(msgs);
-      setSessionUsers(users);
-      const tail = msgs.length > 0 ? msgs[msgs.length - 1]?.created_at : null;
-      setLastReadAt(tail ?? new Date().toISOString());
+      const { session: sess, sessionUser: su } =
+        await ensureSessionAndParticipant();
+      const updated = await updateSessionUserLanguage(supabase, su.id, lang);
+      setSessionUser(updated);
+      setSelectedLanguage(lang);
+      const snapshot = await loadChatSnapshot(supabase, sess.id);
+      setMessages(snapshot.messages);
+      setSessionUsers(snapshot.sessionUsers);
+      setLastReadAt(snapshot.lastReadAt);
       setChatActive(true);
     } catch (e) {
       console.error('confirmEnterChat', e);
@@ -257,7 +293,210 @@ export function useCustomerChatViewModel({
     } finally {
       setIsConfirmingChat(false);
     }
-  }, [saveOptionalProfile, selectedLanguage, session, sessionUser?.id]);
+  }, [
+    point,
+    selectedLanguage,
+    initialLanguageHint,
+    ensureSessionAndParticipant,
+  ]);
+
+  const loginCustomerAccount = useCallback(
+    async (email: string, password: string) => {
+      if (!point?.restaurant_id) {
+        throw new Error('Punto no disponible. Espera un momento e intenta de nuevo.');
+      }
+      setLoginBusy(true);
+      setError(null);
+      try {
+        let sid = session?.id ?? null;
+        let suId = sessionUser?.id ?? null;
+
+        const restaurantId = point.restaurant_id;
+
+        let deviceId: string | null = null;
+        try {
+          deviceId = getOrCreateCustomerIdentifier();
+        } catch {
+          deviceId = null;
+        }
+
+        const lang =
+          selectedLanguage?.trim() ||
+          initialLanguageHint?.trim() ||
+          'es';
+
+        let data: LoginCustomerResponse;
+
+        if (sid && suId) {
+          const res = await fetch('/api/customer/login-customer', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              sessionUserId: suId,
+              sessionId: sid,
+              restaurantId,
+              email,
+              password,
+              deviceId,
+            }),
+          });
+          data = (await res.json()) as LoginCustomerResponse;
+          if (!res.ok) {
+            const msg = [data.error, data.detail].filter(Boolean).join(' — ');
+            throw new Error(msg || 'No se pudo iniciar sesión');
+          }
+          if (data.session) {
+            setSession(data.session);
+            sid = data.session.id;
+          }
+        } else {
+          const res = await fetch('/api/customer/login-customer', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              restaurantId,
+              servicePointId: point.id,
+              preferredSessionId: preferredSessionId?.trim() || null,
+              language: lang,
+              email,
+              password,
+              deviceId,
+            }),
+          });
+          data = (await res.json()) as LoginCustomerResponse;
+          if (!res.ok) {
+            const msg = [data.error, data.detail].filter(Boolean).join(' — ');
+            throw new Error(msg || 'No se pudo iniciar sesión');
+          }
+          if (!data.session || !data.sessionUser) {
+            throw new Error('Respuesta incompleta del servidor al iniciar sesión');
+          }
+          setSession(data.session);
+          setSessionUser(data.sessionUser);
+          sid = data.session.id;
+          suId = data.sessionUser.id;
+        }
+
+        if (data.sessionUser) {
+          setSessionUser(data.sessionUser);
+        }
+
+        setProfileNotice('Bienvenido de nuevo 👋');
+
+        if (sid) {
+          if (!chatActive) {
+            const lang = resolvePreferredLanguage({
+              customerLanguages: data.customer?.languages ?? null,
+              selectedLanguage,
+              sessionUserLanguage: data.sessionUser?.language ?? null,
+              initialLanguageHint,
+            });
+            try {
+              if (data.sessionUser?.id) {
+                const updated = await updateSessionUserLanguage(
+                  supabase,
+                  data.sessionUser.id,
+                  lang
+                );
+                setSessionUser(updated);
+                setSelectedLanguage(lang);
+              }
+              const snapshot = await loadChatSnapshot(supabase, sid);
+              setMessages(snapshot.messages);
+              setSessionUsers(snapshot.sessionUsers);
+              setLastReadAt(snapshot.lastReadAt);
+              setChatActive(true);
+            } catch (e) {
+              console.error('loginCustomerAccount:openChat', e);
+              setError('No se pudo abrir el chat. Pulsa «Ordenar ahora».');
+            }
+          } else {
+            try {
+              const prefLang = resolvePreferredLanguage({
+                customerLanguages: data.customer?.languages ?? null,
+                selectedLanguage: null,
+                sessionUserLanguage: null,
+                initialLanguageHint: null,
+              });
+              if (prefLang && data.sessionUser?.id) {
+                const updated = await updateSessionUserLanguage(
+                  supabase,
+                  data.sessionUser.id,
+                  prefLang
+                );
+                setSessionUser(updated);
+                setSelectedLanguage(prefLang);
+              }
+              const users = await fetchActiveSessionUsersBySession(
+                supabase,
+                sid
+              );
+              setSessionUsers(users);
+            } catch (e) {
+              console.error('loginCustomerAccount:refreshUsers', e);
+            }
+          }
+        }
+      } finally {
+        setLoginBusy(false);
+      }
+    },
+    [
+      session?.id,
+      session?.restaurant_id,
+      sessionUser?.id,
+      point?.id,
+      point?.restaurant_id,
+      preferredSessionId,
+      chatActive,
+      selectedLanguage,
+      initialLanguageHint,
+    ]
+  );
+
+  /** Vuelve a la pantalla previa al chat sin filas de sesión en memoria (como recién escaneado QR). */
+  const resetToPreorderAfterSessionEnd = useCallback(() => {
+    setTypingIndicator(null);
+    setSessionUsers([]);
+    setMessages([]);
+    setChatActive(false);
+    setSession(null);
+    setSessionUser(null);
+    setText('');
+    setLastReadAt(null);
+    clearCustomerUrlAfterSessionEnd?.();
+  }, [clearCustomerUrlAfterSessionEnd]);
+
+  useEffect(() => {
+    if (!autoOpenChatAfterLoad || autoOpenChatAttemptedRef.current) return;
+    if (isLoading || chatActive) return;
+    if (!point) return;
+
+    autoOpenChatAttemptedRef.current = true;
+
+    void (async () => {
+      try {
+        await confirmEnterChat();
+        stripOpenChatQueryParam();
+      } catch (e) {
+        console.error('autoOpenChatAfterRegistration', e);
+        autoOpenChatAttemptedRef.current = true;
+        stripOpenChatQueryParam();
+        setError(
+          e instanceof Error
+            ? e.message
+            : 'No se pudo abrir el chat automáticamente. Pulsa «Ordenar ahora» o inicia sesión.'
+        );
+      }
+    })();
+  }, [
+    autoOpenChatAfterLoad,
+    isLoading,
+    chatActive,
+    point,
+    loginCustomerAccount,
+    confirmEnterChat,
+  ]);
 
   useEffect(() => {
     if (!chatActive) return;
@@ -269,20 +508,27 @@ export function useCustomerChatViewModel({
       if (p.sender === 'customer' && p.user_id === sessionUser.id) return;
 
       if (p.sender === 'waiter') {
-        flashTypingLine('Mesero está escribiendo…');
+        const h = assignedStaffHeaderRef.current;
+        const first = h?.includes(' · ') ? h.split(' · ')[0]?.trim() : null;
+        flashTypingLine(
+          first ? `${first} está escribiendo…` : 'Personal está escribiendo…'
+        );
         return;
       }
 
-      const su = sessionUsersRef.current.find((u) => u.id === p.user_id);
-      const idLabel =
-        su?.display_name?.trim() ||
-        su?.username?.trim() ||
-        su?.user_identifier?.trim();
-      flashTypingLine(
-        idLabel
-          ? `Usuario ${idLabel} está escribiendo…`
-          : 'Un usuario está escribiendo…'
-      );
+      const users = sessionUsersRef.current;
+      const su = users.find((u) => u.id === p.user_id);
+      if (su) {
+        const idx = sessionUserArrivalIndex(users, su.id) ?? 1;
+        const idf = su.user_identifier?.trim();
+        const name =
+          su.display_name?.trim() ||
+          su.username?.trim() ||
+          (idf && !isTechnicalUserIdentifier(idf) ? idf : paddedUsuarioOrder(idx));
+        flashTypingLine(`${name} está escribiendo…`);
+      } else {
+        flashTypingLine('Un usuario está escribiendo…');
+      }
     };
 
     const channel = supabase
@@ -307,6 +553,26 @@ export function useCustomerChatViewModel({
       .on(
         'postgres_changes',
         {
+          event: 'UPDATE',
+          schema: 'public',
+          table: 'service_sessions',
+          filter: `id=eq.${sid}`,
+        },
+        (payload) => {
+          const row = payload.new as ServiceSession | undefined;
+          if (!row?.id) return;
+          if (row.status === 'closed') {
+            resetToPreorderAfterSessionEnd();
+            return;
+          }
+          setSession((prev) =>
+            prev?.id === row.id ? { ...prev, ...row } : prev
+          );
+        }
+      )
+      .on(
+        'postgres_changes',
+        {
           event: '*',
           schema: 'public',
           table: 'session_users',
@@ -324,7 +590,7 @@ export function useCustomerChatViewModel({
           if (row.id === sessionUser?.id) {
             setSessionUser((prev) => (prev ? { ...prev, ...row } : row));
           }
-          if (row.status === 'left') {
+          if (row.status !== 'active') {
             setSessionUsers((prev) => prev.filter((u) => u.id !== row.id));
             return;
           }
@@ -354,13 +620,20 @@ export function useCustomerChatViewModel({
       sessionChannelRef.current = null;
       supabase.removeChannel(channel);
     };
-  }, [chatActive, session?.id, sessionUser?.id, flashTypingLine]);
+  }, [
+    chatActive,
+    session?.id,
+    sessionUser?.id,
+    flashTypingLine,
+    resetToPreorderAfterSessionEnd,
+  ]);
 
   const notifyTyping = useCallback(() => {
     const ch = sessionChannelRef.current;
     const sid = session?.id;
     const suId = sessionUser?.id;
     if (!ch || !sid || !suId) return;
+    if (session?.status === 'closed' || sessionUser?.status === 'left') return;
     const now = Date.now();
     if (now - lastTypingSentRef.current < 850) return;
     lastTypingSentRef.current = now;
@@ -373,7 +646,7 @@ export function useCustomerChatViewModel({
         sender: 'customer',
       } satisfies ChatTypingPayload,
     });
-  }, [session?.id, sessionUser?.id]);
+  }, [session?.id, session?.status, sessionUser?.id, sessionUser?.status]);
 
   const handleMessagesScroll = useCallback((e: UIEvent<HTMLDivElement>) => {
     const el = e.currentTarget;
@@ -385,15 +658,30 @@ export function useCustomerChatViewModel({
 
   const sendMessage = useCallback(async () => {
     if (!chatActive || !text.trim() || !session || !sessionUser) return;
+    if (session.status === 'closed' || sessionUser.status === 'left') return;
+    const body = text.trim();
     try {
       await insertMessage(supabase, {
         session_id: session.id,
         restaurant_id: session.restaurant_id,
         sender: 'customer',
-        text: text.trim(),
+        text: body,
         session_user_id: sessionUser.id,
         user_identifier: sessionUser.user_identifier,
       });
+      if (!session.assigned_to) {
+        try {
+          await insertServiceRequest(supabase, {
+            restaurant_id: session.restaurant_id,
+            service_session_id: session.id,
+            type: 'message',
+            message:
+              body.length > 140 ? `${body.slice(0, 137)}…` : body,
+          });
+        } catch (reqErr) {
+          console.error('sendMessage:serviceRequest', reqErr);
+        }
+      }
       setText('');
       setLastReadAt(new Date().toISOString());
       void touchSessionActivity(supabase, session.id);
@@ -404,6 +692,7 @@ export function useCustomerChatViewModel({
 
   const callWaiter = useCallback(async () => {
     if (!chatActive || !session || !sessionUser) return;
+    if (session.status === 'closed' || sessionUser.status === 'left') return;
     try {
       await insertServiceRequest(supabase, {
         restaurant_id: session.restaurant_id,
@@ -425,6 +714,81 @@ export function useCustomerChatViewModel({
     }
   }, [chatActive, session, sessionUser]);
 
+  /** Cierra la sesión para todos vía API admin (el cliente anónimo no puede pasar RLS en mesa). */
+  const closeSessionForEveryone = useCallback(async () => {
+    if (!session?.id || !sessionUser?.id || !session.restaurant_id) return;
+    if (session.status === 'closed' || sessionUser.status === 'left') return;
+    setLeaveChatBusy(true);
+    setError(null);
+    try {
+      const res = await fetch('/api/customer/close-session', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          sessionId: session.id,
+          sessionUserId: sessionUser.id,
+          restaurantId: session.restaurant_id,
+        }),
+      });
+      const data = (await res.json()) as { error?: string; ok?: boolean };
+      if (!res.ok) {
+        throw new Error(data.error ?? 'No se pudo cerrar la sesión');
+      }
+      resetToPreorderAfterSessionEnd();
+    } catch (e) {
+      console.error('closeSessionForEveryone', e);
+      setError(
+        e instanceof Error
+          ? e.message
+          : 'No se pudo cerrar la sesión. Intenta de nuevo.'
+      );
+      throw e;
+    } finally {
+      setLeaveChatBusy(false);
+    }
+  }, [
+    session?.id,
+    session?.status,
+    session?.restaurant_id,
+    sessionUser?.id,
+    sessionUser?.status,
+    resetToPreorderAfterSessionEnd,
+  ]);
+
+  /** Ya no crea sesión vacía: solo asegura estado “inicio QR” (la sesión nueva va con «Ordenar ahora»). */
+  const startNewSessionAfterClose = useCallback(async () => {
+    setNewSessionBusy(true);
+    setError(null);
+    try {
+      resetToPreorderAfterSessionEnd();
+    } finally {
+      setNewSessionBusy(false);
+    }
+  }, [resetToPreorderAfterSessionEnd]);
+
+  const chatComposerDisabled = useMemo(() => {
+    if (!chatActive) return true;
+    if (session?.status === 'closed') return true;
+    if (sessionUser?.status === 'left') return true;
+    return false;
+  }, [chatActive, session?.status, sessionUser?.status]);
+
+  const closureBanner = useMemo(() => {
+    if (!chatActive) return null;
+    if (session?.status === 'closed') {
+      return 'Esta conversación ha finalizado';
+    }
+    if (sessionUser?.status === 'left') {
+      return 'Saliste de esta conversación o la mesa finalizó. Ya no puedes enviar mensajes.';
+    }
+    return null;
+  }, [chatActive, session?.status, sessionUser?.status]);
+
+  const showStartNewSession = useMemo(
+    () => Boolean(chatActive && session?.status === 'closed'),
+    [chatActive, session?.status]
+  );
+
   const headerLabel = useMemo(() => point?.name ?? 'Sesión', [point?.name]);
 
   return {
@@ -445,15 +809,22 @@ export function useCustomerChatViewModel({
     selectLanguage,
     confirmEnterChat,
     isConfirmingChat,
-    profileDraft,
-    setProfileDraft,
-    hasOptionalProfileInput,
-    saveOptionalProfile,
     profileNotice,
     setProfileNotice,
+    loginCustomerAccount,
+    loginBusy,
     lastReadAt,
     typingIndicator,
+    /** Encabezado en burbujas del mesero (p. ej. "María · Personal"). */
+    assignedStaffHeader,
     notifyTyping,
     handleMessagesScroll,
+    closeSessionForEveryone,
+    leaveChatBusy,
+    startNewSessionAfterClose,
+    newSessionBusy,
+    chatComposerDisabled,
+    closureBanner,
+    showStartNewSession,
   };
 }

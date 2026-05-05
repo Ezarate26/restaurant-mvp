@@ -9,7 +9,9 @@ export default function WaiterPage() {
   return (
     <WaiterDashboardView
       user={vm.user}
+      restaurantSessions={vm.sessions}
       tables={vm.tables}
+      pendingSessionLabels={vm.pendingSessionLabels}
       pendingRequests={vm.pendingRequests}
       activeTable={vm.activeTable}
       messages={vm.messages}
@@ -25,6 +27,9 @@ export default function WaiterPage() {
       onOpenChat={vm.openChat}
       onSendMessage={vm.sendMessage}
       chatSessionUsers={vm.chatSessionUsers}
+      onFinalizeSession={vm.finalizeActiveSession}
+      finalizeSessionBusy={vm.finalizeBusy}
+      waiterToastMessage={vm.toastMessage}
     />
   );
 }

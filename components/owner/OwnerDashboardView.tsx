@@ -11,6 +11,7 @@ import type {
   ServiceSession,
   SessionUser,
 } from '@/lib/model/types';
+import { isPresentSessionUser } from '@/lib/utils/session-user-presence';
 import { OwnerRestaurantSummary } from './OwnerRestaurantSummary';
 import { ServicePointQRCard } from './ServicePointQRCard';
 import { ActiveSessionList } from './ActiveSessionList';
@@ -20,6 +21,8 @@ export interface OwnerDashboardViewProps {
   restaurant: Restaurant | null;
   servicePoints: ServicePoint[];
   sessions: ServiceSession[];
+  /** Sesiones activas visibles (con clientes presentes o solicitud pendiente). */
+  dashboardSessions: ServiceSession[];
   serviceRequests: ServiceRequest[];
   sessionUsers: SessionUser[];
   sessionUsersBySession: Record<string, SessionUser[]>;
@@ -40,7 +43,9 @@ function usersForPoint(
       .filter((s) => s.service_point_id === pointId)
       .map((s) => s.id)
   );
-  return sessionUsers.filter((u) => sid.has(u.session_id));
+  return sessionUsers.filter(
+    (u) => sid.has(u.session_id) && isPresentSessionUser(u)
+  );
 }
 
 export function OwnerDashboardView({
@@ -48,6 +53,7 @@ export function OwnerDashboardView({
   restaurant,
   servicePoints,
   sessions,
+  dashboardSessions,
   serviceRequests,
   sessionUsers,
   sessionUsersBySession,
@@ -63,16 +69,32 @@ export function OwnerDashboardView({
     setOrigin(typeof window !== 'undefined' ? window.location.origin : '');
   }, []);
 
+  const dashboardSessionIds = useMemo(
+    () => new Set(dashboardSessions.map((s) => s.id)),
+    [dashboardSessions]
+  );
+
+  const pendingRequestsForActiveSessions = useMemo(
+    () =>
+      serviceRequests.filter(
+        (r) =>
+          r.service_session_id != null &&
+          dashboardSessionIds.has(r.service_session_id as string)
+      ),
+    [serviceRequests, dashboardSessionIds]
+  );
+
   const monitoring = useMemo(() => {
-    const inService = sessions.filter((s) => Boolean(s.assigned_to));
-    const waiting = sessions.filter(
+    const pool = dashboardSessions;
+    const inService = pool.filter((s) => Boolean(s.assigned_to));
+    const waiting = pool.filter(
       (s) =>
         !s.assigned_to &&
         ((sessionUsersBySession[s.id]?.length ?? 0) > 0 ||
           (pendingBySession[s.id] ?? 0) > 0)
     );
     return { inService, waiting };
-  }, [sessions, sessionUsersBySession, pendingBySession]);
+  }, [dashboardSessions, sessionUsersBySession, pendingBySession]);
 
   return (
     <div className="min-h-screen bg-[#F4F6F8]">
@@ -125,7 +147,7 @@ export function OwnerDashboardView({
         </section>
 
         <ActiveSessionList
-          sessions={sessions}
+          sessions={dashboardSessions}
           pointsById={pointsById}
           profilesById={profilesById}
           sessionUsersBySession={sessionUsersBySession}
@@ -151,9 +173,9 @@ export function OwnerDashboardView({
               sesión(es) en espera de mesero (con clientes o solicitud).
             </li>
             <li>
-              Solicitudes pendientes (totales):{' '}
+              Solicitudes pendientes (sesiones activas):{' '}
               <span className="font-semibold text-[#1F2937]">
-                {serviceRequests.length}
+                {pendingRequestsForActiveSessions.length}
               </span>
             </li>
           </ul>

@@ -1,6 +1,6 @@
 'use client';
 
-import type { PendingTableRequestView as PendingTableRequest } from '@/lib/adapters/types';
+import type { PendingTableRequestView as PendingTableRequest } from '@/lib/adapters/pending-table-request.types';
 
 export interface RequestCardProps {
   request: PendingTableRequest;

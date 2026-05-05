@@ -1,5 +1,9 @@
 'use client';
 
+import Link from 'next/link';
+import { useEffect, useState } from 'react';
+import { CustomerLoginModal } from '@/components/customer/CustomerLoginModal';
+
 const chipBase =
   'rounded-xl border px-4 py-3 text-left text-sm font-semibold transition outline-none focus-visible:ring-2 focus-visible:ring-[#229ED9]/40';
 
@@ -9,15 +13,13 @@ export interface CustomerPreorderViewProps {
   onSelectLanguage: (code: string) => void;
   onOrderNow: () => void;
   isConfirming: boolean;
-  /** Deshabilita chips hasta tener session_user en DB */
   languageControlsDisabled?: boolean;
-  profileDisplayName?: string;
-  profileUsername?: string;
-  profileEmail?: string;
-  onProfileDisplayNameChange?: (value: string) => void;
-  onProfileUsernameChange?: (value: string) => void;
-  onProfileEmailChange?: (value: string) => void;
-  profileNotice?: string | null;
+  createAccountHref: string;
+  onSubmitLogin: (email: string, password: string) => Promise<void>;
+  loginSubmitBusy?: boolean;
+  autoOpenLogin?: boolean;
+  loginInitialEmail?: string | null;
+  loginIntroMessage?: string | null;
 }
 
 const LANGUAGES: { code: string; label: string; hint: string }[] = [
@@ -33,15 +35,20 @@ export function CustomerPreorderView({
   onOrderNow,
   isConfirming,
   languageControlsDisabled,
-  profileDisplayName = '',
-  profileUsername = '',
-  profileEmail = '',
-  onProfileDisplayNameChange,
-  onProfileUsernameChange,
-  onProfileEmailChange,
-  profileNotice = null,
+  createAccountHref,
+  onSubmitLogin,
+  loginSubmitBusy = false,
+  autoOpenLogin = false,
+  loginInitialEmail = null,
+  loginIntroMessage = null,
 }: CustomerPreorderViewProps) {
+  const [loginOpen, setLoginOpen] = useState(false);
+
   const canSubmit = Boolean(selectedLanguage) && !languageControlsDisabled;
+
+  useEffect(() => {
+    if (autoOpenLogin) setLoginOpen(true);
+  }, [autoOpenLogin]);
 
   return (
     <div className="min-h-screen bg-[#F4F6F8] px-4 py-10 sm:px-6 sm:py-14">
@@ -58,7 +65,7 @@ export function CustomerPreorderView({
               {placeName}
             </h1>
             <p className="mt-2 text-sm leading-relaxed text-[#6B7280]">
-              Elige tu idioma y entra al chat con el equipo del restaurante.
+              Regístrate para una experiencia mas personalizada.
             </p>
           </div>
 
@@ -91,85 +98,45 @@ export function CustomerPreorderView({
             })}
           </div>
 
-          <section className="mt-5 rounded-2xl border border-[#E5E7EB] bg-[#FAFBFC] px-4 py-4">
-            <h2 className="text-sm font-semibold text-[#1F2937]">
-              Mejora tu experiencia (opcional)
-            </h2>
-            <p className="mt-1 text-xs leading-relaxed text-[#6B7280]">
-              Puedes continuar sin llenar esto, pero te ayudaremos mejor si lo haces 😉
-            </p>
-            <div className="mt-3 grid gap-3.5">
-              <div>
-                <label
-                  htmlFor="profile-display-name"
-                  className="mb-1 block text-xs font-medium leading-snug text-[#374151]"
-                >
-                  ¿Cómo te llamas o cómo te gustaría que te llamemos?
-                </label>
-                <input
-                  id="profile-display-name"
-                  type="text"
-                  value={profileDisplayName}
-                  onChange={(e) => onProfileDisplayNameChange?.(e.target.value)}
-                  className="w-full rounded-lg border border-[#E5E7EB] bg-white px-3 py-2.5 text-sm text-[#1F2937] placeholder:text-[#9CA3AF] outline-none transition focus:border-[#229ED9] focus:ring-2 focus:ring-[#229ED9]/35"
-                  placeholder="Nombre: ej. María González"
-                  aria-label="Nombre"
-                />
-              </div>
-              <div>
-                <label
-                  htmlFor="profile-username"
-                  className="mb-1 block text-xs font-medium leading-snug text-[#374151]"
-                >
-                  ¿Tienes un alias?
-                </label>
-                <input
-                  id="profile-username"
-                  type="text"
-                  value={profileUsername}
-                  onChange={(e) => onProfileUsernameChange?.(e.target.value)}
-                  className="w-full rounded-lg border border-[#E5E7EB] bg-white px-3 py-2.5 text-sm text-[#1F2937] placeholder:text-[#9CA3AF] outline-none transition focus:border-[#229ED9] focus:ring-2 focus:ring-[#229ED9]/35"
-                  placeholder="Usuario: ej. juan123"
-                  aria-label="Usuario o alias"
-                />
-              </div>
-              <div>
-                <label
-                  htmlFor="profile-email"
-                  className="mb-1 block text-xs font-medium leading-snug text-[#374151]"
-                >
-                  Tu correo para recordarte en tus futuras visitas (opcional)
-                </label>
-                <input
-                  id="profile-email"
-                  type="email"
-                  value={profileEmail}
-                  onChange={(e) => onProfileEmailChange?.(e.target.value)}
-                  className="w-full rounded-lg border border-[#E5E7EB] bg-white px-3 py-2.5 text-sm text-[#1F2937] placeholder:text-[#9CA3AF] outline-none transition focus:border-[#229ED9] focus:ring-2 focus:ring-[#229ED9]/35"
-                  placeholder="Email: ej. maria@correo.com"
-                  aria-label="Correo electrónico"
-                />
-              </div>
-            </div>
-            {profileNotice ? (
-              <p className="mt-2 text-xs text-amber-700">{profileNotice}</p>
-            ) : null}
-          </section>
-
-          <button
-            type="button"
-            disabled={!canSubmit || isConfirming}
-            onClick={onOrderNow}
-            className="mt-8 w-full rounded-xl bg-[#229ED9] py-3.5 text-sm font-semibold text-white shadow-sm transition hover:brightness-95 active:brightness-90 disabled:cursor-not-allowed disabled:opacity-50"
-          >
-            {isConfirming ? 'Abriendo chat…' : 'Continuar'}
-          </button>
+          <div className="mt-6 flex flex-col gap-3">
+            <button
+              type="button"
+              disabled={!canSubmit || isConfirming}
+              onClick={onOrderNow}
+              className="w-full rounded-xl bg-[#229ED9] py-3.5 text-sm font-semibold text-white shadow-sm transition hover:brightness-95 active:brightness-90 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              {isConfirming ? 'Abriendo chat…' : 'Ordenar ahora'}
+            </button>
+            <button
+              type="button"
+              disabled={languageControlsDisabled}
+              onClick={() => setLoginOpen(true)}
+              className="w-full rounded-xl border border-[#229ED9]/40 bg-[#E3F2FD]/60 py-3.5 text-sm font-semibold text-[#0D47A1] shadow-sm transition hover:bg-[#E3F2FD] disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              Iniciar sesión
+            </button>
+            <Link
+              href={createAccountHref}
+              className="text-center text-xs font-medium text-[#229ED9] underline-offset-2 transition hover:underline"
+            >
+              Crea cuenta
+            </Link>
+          </div>
 
           <p className="mt-4 text-center text-xs text-[#9CA3AF]">
             Tu mesa o punto ya está asignado por el código QR.
           </p>
         </div>
       </div>
+
+      <CustomerLoginModal
+        open={loginOpen}
+        onOpenChange={setLoginOpen}
+        introMessage={loginIntroMessage}
+        initialEmail={loginInitialEmail}
+        busy={loginSubmitBusy}
+        onSubmit={onSubmitLogin}
+      />
     </div>
   );
 }

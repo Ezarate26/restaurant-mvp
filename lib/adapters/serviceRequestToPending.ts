@@ -1,5 +1,5 @@
 import type { ServiceRequest } from '@/lib/model/types';
-import type { PendingTableRequestView } from './types';
+import type { PendingTableRequestView } from './pending-table-request.types';
 
 /**
  * Agrupa solicitudes pendientes por `service_session_id` y produce una fila por sesión.

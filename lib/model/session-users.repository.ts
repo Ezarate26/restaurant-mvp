@@ -1,6 +1,23 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { SessionUser } from './types';
 
+export async function fetchSessionUserById(
+  client: SupabaseClient,
+  sessionUserId: string
+): Promise<SessionUser | null> {
+  const { data, error } = await client
+    .from('session_users')
+    .select('*')
+    .eq('id', sessionUserId)
+    .maybeSingle();
+
+  if (error) {
+    console.error('fetchSessionUserById', error);
+    return null;
+  }
+  return (data as SessionUser) ?? null;
+}
+
 export async function fetchActiveSessionUsersBySession(
   client: SupabaseClient,
   sessionId: string
@@ -9,7 +26,7 @@ export async function fetchActiveSessionUsersBySession(
     .from('session_users')
     .select('*')
     .eq('session_id', sessionId)
-    .neq('status', 'left')
+    .eq('status', 'active')
     .order('joined_at', { ascending: true });
 
   if (error) {
@@ -37,7 +54,7 @@ export async function fetchSessionUsersByRestaurant(
     .from('session_users')
     .select('*')
     .in('session_id', ids)
-    .neq('status', 'left');
+    .eq('status', 'active');
 
   if (error) {
     console.error('fetchSessionUsersByRestaurant', error);
@@ -46,9 +63,14 @@ export async function fetchSessionUsersByRestaurant(
   return (data as SessionUser[]) ?? [];
 }
 
+function isUniqueViolation(err: { code?: string } | null): boolean {
+  return err?.code === '23505';
+}
+
 /**
- * Upsert por (session_id, user_identifier). Sin constraint UNIQUE en DB,
- * lo emulamos con select-then-insert.
+ * Participante del cliente en una sesión de mesa: `device_id` + `user_identifier`
+ * suelen coincidir con el id estable del navegador. Si el usuario ya salió (`left`),
+ * no revivimos la fila: archivamos identidad y creamos **otra** fila (reconexión limpia).
  */
 export async function upsertSessionUserByIdentifier(
   client: SupabaseClient,
@@ -58,42 +80,77 @@ export async function upsertSessionUserByIdentifier(
     language?: string | null;
   }
 ): Promise<SessionUser> {
-  const { data: existing, error: fetchErr } = await client
+  const sid = args.sessionId;
+  const ident = args.userIdentifier;
+
+  const { data: byDevice, error: devErr } = await client
     .from('session_users')
     .select('*')
-    .eq('session_id', args.sessionId)
-    .eq('user_identifier', args.userIdentifier)
+    .eq('session_id', sid)
+    .eq('device_id', ident)
     .maybeSingle();
 
-  if (fetchErr) {
-    console.error('upsertSessionUserByIdentifier:fetch', fetchErr);
-    throw fetchErr;
+  if (devErr) {
+    console.error('upsertSessionUserByIdentifier:fetch-device', devErr);
+    throw devErr;
+  }
+
+  let existing = byDevice as SessionUser | null;
+
+  if (!existing) {
+    const { data: byIdent, error: identErr } = await client
+      .from('session_users')
+      .select('*')
+      .eq('session_id', sid)
+      .eq('user_identifier', ident)
+      .maybeSingle();
+
+    if (identErr) {
+      console.error('upsertSessionUserByIdentifier:fetch-ident', identErr);
+      throw identErr;
+    }
+    existing = byIdent as SessionUser | null;
+
+    if (existing?.id && !existing.device_id) {
+      const { data: patched, error: patchErr } = await client
+        .from('session_users')
+        .update({ device_id: ident })
+        .eq('id', existing.id)
+        .select('*')
+        .single();
+      if (!patchErr && patched) {
+        existing = patched as SessionUser;
+      }
+    }
   }
 
   if (existing) {
     const row = existing as SessionUser;
     if (row.status === 'left') {
-      const { data: revived, error: revErr } = await client
+      const { error: archErr } = await client
         .from('session_users')
-        .update({ status: 'active', left_at: null })
-        .eq('id', row.id)
-        .select('*')
-        .single();
-      if (revErr) {
-        console.error('upsertSessionUserByIdentifier:revive', revErr);
-        throw revErr;
+        .update({
+          device_id: null,
+          user_identifier: `dep:${row.id}`,
+        })
+        .eq('id', row.id);
+      if (archErr) {
+        console.error('upsertSessionUserByIdentifier:archive-left', archErr);
+        throw archErr;
       }
-      return revived as SessionUser;
+      existing = null;
+    } else {
+      return row;
     }
-    return row;
   }
 
   const { data: inserted, error: insErr } = await client
     .from('session_users')
     .insert([
       {
-        session_id: args.sessionId,
-        user_identifier: args.userIdentifier,
+        session_id: sid,
+        user_identifier: ident,
+        device_id: ident,
         language: args.language ?? null,
         status: 'active',
       },
@@ -101,11 +158,35 @@ export async function upsertSessionUserByIdentifier(
     .select('*')
     .single();
 
+  if (!insErr && inserted) {
+    return inserted as SessionUser;
+  }
+
+  if (insErr && isUniqueViolation(insErr)) {
+    const { data: raced, error: raceErr } = await client
+      .from('session_users')
+      .select('*')
+      .eq('session_id', sid)
+      .eq('device_id', ident)
+      .eq('status', 'active')
+      .maybeSingle();
+    if (!raceErr && raced) return raced as SessionUser;
+
+    const { data: raced2, error: raceErr2 } = await client
+      .from('session_users')
+      .select('*')
+      .eq('session_id', sid)
+      .eq('user_identifier', ident)
+      .eq('status', 'active')
+      .maybeSingle();
+    if (!raceErr2 && raced2) return raced2 as SessionUser;
+  }
+
   if (insErr) {
     console.error('upsertSessionUserByIdentifier:insert', insErr);
     throw insErr;
   }
-  return inserted as SessionUser;
+  throw new Error('upsertSessionUserByIdentifier: no row');
 }
 
 export async function updateSessionUserLanguage(
@@ -196,8 +277,51 @@ export async function markSessionUserLeft(
   client: SupabaseClient,
   sessionUserId: string
 ): Promise<void> {
-  await client
+  const now = new Date().toISOString();
+  const { error } = await client
     .from('session_users')
-    .update({ status: 'left', left_at: new Date().toISOString() })
+    .update({
+      status: 'left',
+      left_at: now,
+      device_id: null,
+      user_identifier: `dep:${sessionUserId}`,
+    })
     .eq('id', sessionUserId);
+  if (error) {
+    console.error('markSessionUserLeft', error);
+    throw error;
+  }
+}
+
+/**
+ * Marca como `left` todos los participantes activos de la sesión y libera `device_id` /
+ * `user_identifier` para que no choquen con UNIQUE globales al abrir otra sesión con el mismo dispositivo.
+ */
+export async function markAllActiveSessionUsersLeft(
+  client: SupabaseClient,
+  sessionId: string
+): Promise<void> {
+  const rows = await fetchActiveSessionUsersBySession(client, sessionId);
+  if (rows.length === 0) return;
+
+  const now = new Date().toISOString();
+  const results = await Promise.all(
+    rows.map((row) =>
+      client
+        .from('session_users')
+        .update({
+          status: 'left',
+          left_at: now,
+          device_id: null,
+          user_identifier: `dep:${row.id}`,
+        })
+        .eq('id', row.id)
+    )
+  );
+
+  const firstErr = results.find((r) => r.error)?.error;
+  if (firstErr) {
+    console.error('markAllActiveSessionUsersLeft', firstErr);
+    throw firstErr;
+  }
 }

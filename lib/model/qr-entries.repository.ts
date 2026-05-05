@@ -14,7 +14,7 @@ export interface ResolvedQr {
  * Prioriza:
  *   1) qr_entries.id == code           → toma service_point_id (o target_id) del entry.
  *   2) service_points.qr_code == code  → match directo por código de punto.
- *   3) service_points.id == code       → fallback: el código es el id del punto (compat /table/[id]).
+ *   3) service_points.id == code       → fallback: el código es el id del punto.
  */
 export async function resolveQrCode(
   client: SupabaseClient,

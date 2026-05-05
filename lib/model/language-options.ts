@@ -2,6 +2,7 @@
 export const APP_LANGUAGE_OPTIONS = [
   { code: 'es', label: 'Español' },
   { code: 'en', label: 'English' },
+  { code: 'fr', label: 'Français' },
   { code: 'pt', label: 'Português' },
 ] as const;
 
