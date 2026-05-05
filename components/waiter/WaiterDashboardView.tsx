@@ -18,6 +18,7 @@ import { WaiterHelpPanel } from '@/components/waiter/WaiterHelpPanel';
 
 export interface WaiterDashboardViewProps {
   user: User | null;
+  viewerLanguage?: string | null;
   /** Sesiones activas del restaurante (evita race al tomar mesa vs. `tables` filtradas). */
   restaurantSessions?: ServiceSession[];
   tables: Table[];
@@ -42,6 +43,7 @@ export interface WaiterDashboardViewProps {
 
 export function WaiterDashboardView({
   user,
+  viewerLanguage = null,
   restaurantSessions = [],
   tables,
   pendingSessionLabels = {},
@@ -233,6 +235,7 @@ export function WaiterDashboardView({
         activeTableName={activeTableDisplayName}
         messages={messages}
         currentUserType="waiter"
+        viewerLanguage={viewerLanguage}
         draft={text}
         onDraftChange={onTextChange}
         onSend={onSendMessage}

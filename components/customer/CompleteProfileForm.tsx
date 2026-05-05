@@ -4,18 +4,12 @@ import { useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { getOrCreateCustomerIdentifier } from '@/lib/utils/customerIdentifier';
+import { LANGUAGES } from '@/constants/languages';
 
 const fieldClass =
   'w-full rounded-xl border border-[#E5E7EB] bg-white px-3 py-2.5 text-[15px] text-[#1F2937] placeholder:text-[#9CA3AF] outline-none transition focus:border-[#229ED9] focus:ring-2 focus:ring-[#229ED9]/35';
 
-const REG_LANG_CHIPS: { code: string; label: string; flag: string }[] = [
-  { code: 'es', label: 'Español', flag: '🇲🇽' },
-  { code: 'en', label: 'English', flag: '🇺🇸' },
-  { code: 'fr', label: 'Français', flag: '🇫🇷' },
-];
-
-const chipToggle =
-  'rounded-xl border px-3 py-2 text-left text-sm font-semibold transition outline-none focus-visible:ring-2 focus-visible:ring-[#229ED9]/40';
+const multiSelectClass = `${fieldClass} min-h-[10rem] py-2`;
 
 export interface CompleteProfileFormProps {
   initialEmail?: string;
@@ -48,16 +42,6 @@ export function CompleteProfileForm({
   const [successFlow, setSuccessFlow] = useState<{
     loginPath: string;
   } | null>(null);
-
-  const toggleLanguage = (code: string) => {
-    setLanguages((prev) => {
-      if (prev.includes(code)) {
-        const next = prev.filter((c) => c !== code);
-        return next.length > 0 ? next : ['es'];
-      }
-      return [...prev, code];
-    });
-  };
 
   const emailNorm = email.trim().toLowerCase();
 
@@ -216,31 +200,33 @@ export function CompleteProfileForm({
         <label className="mb-2 block text-xs font-medium text-[#374151]">
           Idiomas preferidos <span className="text-red-600">*</span>
         </label>
-        <div className="flex flex-wrap gap-2">
-          {REG_LANG_CHIPS.map(({ code, label, flag }) => {
-            const on = languages.includes(code);
-            return (
-              <button
-                key={code}
-                type="button"
-                disabled={busy}
-                onClick={() => toggleLanguage(code)}
-                className={`${chipToggle} ${
-                  on
-                    ? 'border-[#229ED9] bg-[#E3F2FD] text-[#0D47A1]'
-                    : 'border-[#E5E7EB] bg-white text-[#1F2937] hover:border-[#CBD5E1]'
-                }`}
-              >
-                <span className="mr-1.5" aria-hidden>
-                  {flag}
-                </span>
-                {label}
-              </button>
+        <select
+          multiple
+          disabled={busy}
+          value={languages}
+          size={8}
+          aria-label="Idiomas preferidos"
+          onChange={(e) => {
+            const selected = Array.from(e.target.selectedOptions).map(
+              (o) => o.value
             );
-          })}
-        </div>
+            const rank = new Map(LANGUAGES.map((l, i) => [l.code, i]));
+            const sorted = [...new Set(selected)].sort(
+              (a, b) => (rank.get(a) ?? 0) - (rank.get(b) ?? 0)
+            );
+            setLanguages(sorted.length > 0 ? sorted : ['es']);
+          }}
+          className={multiSelectClass}
+        >
+          {LANGUAGES.map(({ code, name }) => (
+            <option key={code} value={code}>
+              {name}
+            </option>
+          ))}
+        </select>
         <p className="mt-1.5 text-xs text-[#9CA3AF]">
-          El primero se usa como idioma principal en el chat.
+          Mantén pulsada Ctrl (Windows) o ⌘ (Mac) para elegir varios. Entre los
+          seleccionados, el idioma principal en el chat es el que aparece antes en este listado.
         </p>
       </div>
 

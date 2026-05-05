@@ -7,6 +7,8 @@ import { customerPeerHeaderLabels } from '@/lib/utils/chat-peer-label';
 export interface MessageBubbleProps {
   message: Message;
   currentUserType: Exclude<Message['sender'], 'system'>;
+  /** Idioma del usuario que está viendo el chat (para elegir traducción). */
+  viewerLanguage?: string | null;
   /** Sesión actual del cliente (QR); obligatorio en vista cliente para multisesión. */
   currentSessionUserId?: string | null;
   /** Solo vista cliente: marca temporal local “leído” sin backend. */
@@ -30,11 +32,15 @@ function PeerCustomerBubble({
   headerMuted,
   bubbleClass,
   text,
+  translatedText,
+  translationMutedClass,
 }: {
   peerHeader: PeerHeaderFields;
   headerMuted: string;
   bubbleClass: string;
   text: string;
+  translatedText?: string | null;
+  translationMutedClass: string;
 }) {
   const [open, setOpen] = useState(false);
   const longPressTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -107,6 +113,11 @@ function PeerCustomerBubble({
         <p className="whitespace-pre-wrap text-[15px] leading-snug text-[#1F2937]">
           {text}
         </p>
+        <p
+          className={`mt-1 whitespace-pre-wrap text-xs italic leading-snug ${translationMutedClass}`}
+        >
+          {translatedText?.trim() || '…'}
+        </p>
       </div>
 
       {open ? (
@@ -166,6 +177,7 @@ function parseTime(iso: string | undefined | null): number | null {
 export function MessageBubble({
   message,
   currentUserType,
+  viewerLanguage = null,
   currentSessionUserId,
   lastReadAt,
   showReadReceipts = false,
@@ -173,6 +185,22 @@ export function MessageBubble({
   waiterIncomingBubbleLabel = null,
 }: MessageBubbleProps) {
   const text = message.text ?? '';
+  const viewerLang = (viewerLanguage ?? '').trim().toLowerCase() || null;
+  const originalLang =
+    (message.original_language ?? '').trim().toLowerCase() || null;
+  const translationText =
+    message.translations?.find(
+      (t) => (t.language ?? '').trim().toLowerCase() === viewerLang
+    )?.translated_text ?? null;
+  const isLegacyUnlinked =
+    (message.sender === 'waiter' || message.sender === 'customer') &&
+    (!message.session_user_id || !message.user_identifier);
+  const isInvalidParticipantMessage =
+    (message.sender === 'waiter' || message.sender === 'customer') &&
+    (!message.session_user_id ||
+      !message.user_identifier ||
+      !originalLang ||
+      !text.trim());
 
   if (message.sender === 'system') {
     return (
@@ -185,6 +213,9 @@ export function MessageBubble({
       </div>
     );
   }
+
+  // Mensajes antiguos o incompletos: no romper UI ni mezclar con chat activo.
+  if (isInvalidParticipantMessage) return null;
 
   const isWaiterMessage = message.sender === 'waiter';
   const isCustomerMessage = message.sender === 'customer';
@@ -261,6 +292,20 @@ export function MessageBubble({
   const staffHeaderClass =
     'mb-0.5 block max-w-[85%] text-[11px] font-semibold leading-snug normal-case tracking-normal';
 
+  const translationMutedClass =
+    variant === 'me' || variant === 'waiter_self'
+      ? 'text-white/70'
+      : variant === 'waiter_in'
+      ? 'text-amber-900/55'
+      : 'text-[#9CA3AF]';
+
+  // Nuevo orden UX:
+  // - Línea principal: traducción al idioma del viewer si existe; si no, fallback al original.
+  // - Línea secundaria: original solo si el viewer es de idioma distinto.
+  const primaryLine = translationText?.trim() || text.trim() || '…';
+  const showOriginalLine = Boolean(viewerLang && originalLang && viewerLang !== originalLang);
+  const originalLine = text.trim() || '…';
+
   if (peerHeader) {
     return (
       <div className={`flex w-full ${rowAlign}`}>
@@ -269,6 +314,8 @@ export function MessageBubble({
           headerMuted={headerMuted}
           bubbleClass={bubbleClass}
           text={text}
+          translatedText={primaryLine}
+          translationMutedClass={translationMutedClass}
         />
       </div>
     );
@@ -290,6 +337,18 @@ export function MessageBubble({
           }`}
         >
           {text}
+        </p>
+        {isLegacyUnlinked ? (
+          <p
+            className={`mt-1 whitespace-pre-wrap text-[11px] italic leading-snug ${translationMutedClass}`}
+          >
+            (legacy: mensaje sin vínculo de sesión)
+          </p>
+        ) : null}
+        <p
+          className={`mt-1 whitespace-pre-wrap text-xs italic leading-snug ${translationMutedClass}`}
+        >
+          {showOriginalLine ? originalLine : null}
         </p>
         {showReadReceipts && variant === 'me' && (
           <div className="mt-1 flex justify-end text-[11px] tracking-tight text-white/75">

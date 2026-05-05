@@ -9,6 +9,7 @@ export default function WaiterPage() {
   return (
     <WaiterDashboardView
       user={vm.user}
+      viewerLanguage={vm.profile?.language ?? 'es'}
       restaurantSessions={vm.sessions}
       tables={vm.tables}
       pendingSessionLabels={vm.pendingSessionLabels}

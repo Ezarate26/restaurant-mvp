@@ -1,4 +1,5 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
+import { normalizeLanguageCode } from '@/constants/languages';
 import type {
   BusinessMode,
   Restaurant,
@@ -38,6 +39,25 @@ export async function fetchRestaurantById(
     return null;
   }
   return (data as Restaurant) ?? null;
+}
+
+export async function fetchRestaurantDefaultLanguage(
+  client: SupabaseClient,
+  restaurantId: string
+): Promise<string> {
+  const { data, error } = await client
+    .from('restaurant_settings')
+    .select('default_language')
+    .eq('restaurant_id', restaurantId)
+    .maybeSingle();
+
+  if (error) {
+    console.error('fetchRestaurantDefaultLanguage', error);
+    return 'es';
+  }
+  return normalizeLanguageCode(
+    (data?.default_language as string | null | undefined) ?? undefined
+  );
 }
 
 function generateInviteCode(): string {

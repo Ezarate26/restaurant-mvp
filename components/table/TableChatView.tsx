@@ -24,6 +24,7 @@ export interface TableChatViewProps {
   headerLabel?: string;
   usersSlot?: ReactNode;
   currentSessionUserId?: string | null;
+  viewerLanguage?: string | null;
   lastReadAt?: string | null;
   typingIndicator?: string | null;
   onMessagesScroll?: (e: UIEvent<HTMLDivElement>) => void;
@@ -49,6 +50,7 @@ export function TableChatView({
   headerLabel,
   usersSlot,
   currentSessionUserId = null,
+  viewerLanguage = null,
   lastReadAt = null,
   typingIndicator = null,
   onMessagesScroll,
@@ -118,6 +120,7 @@ export function TableChatView({
           <ChatMessagesPane
             messages={messages}
             currentSessionUserId={currentSessionUserId}
+            viewerLanguage={viewerLanguage}
             lastReadAt={lastReadAt}
             sessionUsers={sessionUsers}
             waiterIncomingBubbleLabel={waiterIncomingBubbleLabel}

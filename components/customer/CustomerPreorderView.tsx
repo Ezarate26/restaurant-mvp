@@ -3,9 +3,10 @@
 import Link from 'next/link';
 import { useEffect, useState } from 'react';
 import { CustomerLoginModal } from '@/components/customer/CustomerLoginModal';
+import { LANGUAGES } from '@/constants/languages';
 
-const chipBase =
-  'rounded-xl border px-4 py-3 text-left text-sm font-semibold transition outline-none focus-visible:ring-2 focus-visible:ring-[#229ED9]/40';
+const selectClass =
+  'w-full rounded-xl border border-[#E5E7EB] bg-white px-3 py-3 text-left text-sm font-semibold text-[#1F2937] outline-none transition focus-visible:border-[#229ED9] focus-visible:ring-2 focus-visible:ring-[#229ED9]/40 disabled:cursor-not-allowed disabled:opacity-60';
 
 export interface CustomerPreorderViewProps {
   placeName: string;
@@ -21,12 +22,6 @@ export interface CustomerPreorderViewProps {
   loginInitialEmail?: string | null;
   loginIntroMessage?: string | null;
 }
-
-const LANGUAGES: { code: string; label: string; hint: string }[] = [
-  { code: 'es', label: 'Español', hint: 'Mensajes y menú en español' },
-  { code: 'en', label: 'English', hint: 'Messages and menu in English' },
-  { code: 'pt', label: 'Português', hint: 'Mensagens em português' },
-];
 
 export function CustomerPreorderView({
   placeName,
@@ -69,34 +64,29 @@ export function CustomerPreorderView({
             </p>
           </div>
 
-          <p className="mb-3 text-xs font-medium uppercase tracking-wide text-[#6B7280]">
+          <label
+            className="mb-2 block text-xs font-medium uppercase tracking-wide text-[#6B7280]"
+            htmlFor="preorder-language"
+          >
             Idioma
-          </p>
-          <div className="grid gap-2" role="radiogroup" aria-label="Idioma">
-            {LANGUAGES.map((lang) => {
-              const selected = selectedLanguage === lang.code;
-              return (
-                <button
-                  key={lang.code}
-                  type="button"
-                  role="radio"
-                  aria-checked={selected}
-                  disabled={languageControlsDisabled}
-                  onClick={() => onSelectLanguage(lang.code)}
-                  className={`${chipBase} ${
-                    selected
-                      ? 'border-[#229ED9] bg-[#E3F2FD] text-[#0D47A1]'
-                      : 'border-[#E5E7EB] bg-white text-[#1F2937] hover:border-[#CBD5E1]'
-                  } ${languageControlsDisabled ? 'cursor-not-allowed opacity-60' : ''}`}
-                >
-                  <span className="block">{lang.label}</span>
-                  <span className="mt-0.5 block text-xs font-normal text-[#6B7280]">
-                    {lang.hint}
-                  </span>
-                </button>
-              );
-            })}
-          </div>
+          </label>
+          <select
+            id="preorder-language"
+            disabled={languageControlsDisabled}
+            value={selectedLanguage ?? ''}
+            onChange={(e) => onSelectLanguage(e.target.value)}
+            className={selectClass}
+            aria-label="Idioma de la experiencia"
+          >
+            <option value="" disabled>
+              Elige idioma…
+            </option>
+            {LANGUAGES.map(({ code, name }) => (
+              <option key={code} value={code}>
+                {name}
+              </option>
+            ))}
+          </select>
 
           <div className="mt-6 flex flex-col gap-3">
             <button

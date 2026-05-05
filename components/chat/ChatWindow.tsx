@@ -10,6 +10,7 @@ export interface ChatWindowProps {
   activeTableName?: string | null;
   messages: Message[];
   currentUserType: Exclude<Message['sender'], 'system'>;
+  viewerLanguage?: string | null;
   draft: string;
   onDraftChange: (value: string) => void;
   onSend: () => void;
@@ -31,6 +32,7 @@ export function ChatWindow({
   activeTableName,
   messages,
   currentUserType,
+  viewerLanguage = null,
   draft,
   onDraftChange,
   onSend,
@@ -92,6 +94,7 @@ export function ChatWindow({
             key={m.id}
             message={m}
             currentUserType={currentUserType}
+            viewerLanguage={viewerLanguage}
             currentSessionUserId={currentSessionUserId}
             lastReadAt={lastReadAt}
             showReadReceipts={showReadReceipts}
