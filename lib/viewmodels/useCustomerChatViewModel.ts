@@ -27,7 +27,6 @@ import {
   sessionUserArrivalIndex,
   staffBubbleHeaderFromFullName,
 } from '@/lib/utils/session-user-display-name';
-import { resolveCustomerOutgoingLanguages } from '@/lib/utils/chat-message-languages';
 import { isTechnicalUserIdentifier, paddedUsuarioOrder } from '@/lib/utils/user-identifier';
 import {
   loadChatSnapshot,
@@ -35,8 +34,7 @@ import {
   type LoginCustomerResponse,
 } from '@/lib/viewmodels/customer-chat.helpers';
 import { useSessionStore } from '@/lib/stores/sessionStore';
-import { upsertMessageTranslations } from '@/lib/model/message-translations.repository';
-import { mockTranslate } from '@/features/translation/translation.service';
+import { ensureTranslationsForSession } from '@/lib/model/message-translations.repository';
 import { normalizeLanguageCode } from '@/constants/languages';
 import { useSessionLanguages } from '@/lib/hooks/useSessionLanguages';
 import type {
@@ -105,19 +103,18 @@ export function useCustomerChatViewModel({
   const [assignedStaffHeader, setAssignedStaffHeader] = useState<string | null>(
     null
   );
-  const [assignedWaiterLanguage, setAssignedWaiterLanguage] = useState<
-    string | null
-  >(null);
   const [restaurantDefaultLanguage, setRestaurantDefaultLanguage] =
     useState<string>('es');
 
   const [lastReadAt, setLastReadAt] = useState<string | null>(null);
   const [typingIndicator, setTypingIndicator] = useState<string | null>(null);
-  const { languages: sessionLanguages } = useSessionLanguages(
-    chatActive ? session?.id ?? null : null
-  );
+  const {
+    languages: sessionLanguages,
+    refetchSessionLanguages,
+  } = useSessionLanguages(chatActive ? session?.id ?? null : null);
 
   const sessionIdRef = useRef<string | null>(null);
+  const latestLanguagesRef = useRef<string[]>([]);
   const sessionUsersRef = useRef<SessionUser[]>([]);
   const sessionChannelRef = useRef<ReturnType<typeof supabase.channel> | null>(
     null
@@ -136,14 +133,22 @@ export function useCustomerChatViewModel({
   }, [sessionUsers]);
 
   useEffect(() => {
+    latestLanguagesRef.current = sessionLanguages;
+  }, [sessionLanguages]);
+
+  useEffect(() => {
     if (!chatActive || !session?.id) return;
-    const uniq = [
-      ...new Set(
-        [sessionUser?.language, ...sessionUsers.map((u) => u.language)]
-          .filter((x): x is string => typeof x === 'string' && Boolean(x.trim()))
-          .map((x) => normalizeLanguageCode(x))
-      ),
-    ];
+    const fromHook =
+      sessionLanguages.length > 0 ? sessionLanguages : null;
+    const uniq =
+      fromHook ??
+      [
+        ...new Set(
+          [sessionUser?.language, ...sessionUsers.map((u) => u.language)]
+            .filter((x): x is string => typeof x === 'string' && Boolean(x.trim()))
+            .map((x) => normalizeLanguageCode(x))
+        ),
+      ];
     if (uniq.length === 0) return;
     sessionStore.setSession({
       sessionId: session.id,
@@ -154,44 +159,55 @@ export function useCustomerChatViewModel({
       languages: uniq,
       users: sessionStore.users,
     });
-  }, [chatActive, session?.id, sessionUsers, sessionUser?.language]);
+  }, [
+    chatActive,
+    session?.id,
+    sessionUsers,
+    sessionUser?.language,
+    sessionLanguages,
+  ]);
 
   useEffect(() => {
-    if (!chatActive) return;
-    if (!session?.id) return;
-    if (!messages.length) return;
-    if (!sessionLanguages.length) return;
-
-    // Sync histórico: completar traducciones faltantes cuando cambian idiomas.
-    const run = async () => {
-      const langs = [...new Set(sessionLanguages.map((l) => normalizeLanguageCode(l)))];
-      const rows: { message_id: string; language: string; translated_text: string }[] = [];
-      for (const m of messages) {
-        if (!m.id || !m.original_language || !(m.text ?? '').trim()) continue;
-        const existing = new Set(
-          (m.translations ?? []).map((t) => normalizeLanguageCode(t.language))
-        );
-        for (const lang of langs) {
-          if (existing.has(lang)) continue;
-          const orig = normalizeLanguageCode(m.original_language);
-          const base = (m.text ?? '').trim();
-          rows.push({
-            message_id: m.id,
-            language: lang,
-            translated_text: lang === orig ? base : mockTranslate(base, orig, lang),
-          });
-        }
+    if (!chatActive || !session?.id || !sessionLanguages.length) return;
+    let cancelled = false;
+    const sid = session.id;
+    void (async () => {
+      try {
+        await ensureTranslationsForSession(supabase, sid, sessionLanguages);
+        if (cancelled || sessionIdRef.current !== sid) return;
+        const fresh = await fetchMessagesBySession(supabase, sid);
+        if (cancelled || sessionIdRef.current !== sid) return;
+        setMessages(fresh);
+      } catch (e) {
+        console.error('ensureTranslationsForSession:languages', e);
       }
-      if (rows.length === 0) return;
-      // chunk simple para no mandar cargas enormes.
-      const CHUNK = 500;
-      for (let i = 0; i < rows.length; i += CHUNK) {
-        await upsertMessageTranslations(supabase, rows.slice(i, i + CHUNK));
-      }
+    })();
+    return () => {
+      cancelled = true;
     };
+  }, [chatActive, session?.id, sessionLanguages]);
 
-    void run().catch((e) => console.error('syncMissingTranslations', e));
-  }, [chatActive, session?.id, sessionLanguages, messages]);
+  useEffect(() => {
+    if (!chatActive || !session?.id) return;
+    const langs = latestLanguagesRef.current;
+    if (!langs.length) return;
+    let cancelled = false;
+    const sid = session.id;
+    void (async () => {
+      try {
+        await ensureTranslationsForSession(supabase, sid, langs);
+        if (cancelled || sessionIdRef.current !== sid) return;
+        const fresh = await fetchMessagesBySession(supabase, sid);
+        if (cancelled || sessionIdRef.current !== sid) return;
+        setMessages(fresh);
+      } catch (e) {
+        console.error('ensureTranslationsForSession:sessionId', e);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [chatActive, session?.id]);
 
   /** Aviso tipo banner (p. ej. correo enviado): desaparece solo a los 5 s. */
   useEffect(() => {
@@ -208,7 +224,6 @@ export function useCustomerChatViewModel({
     const aid = session?.assigned_to?.trim();
     if (!aid) {
       setAssignedStaffHeader(null);
-      setAssignedWaiterLanguage(null);
       return;
     }
     let cancelled = false;
@@ -217,11 +232,9 @@ export function useCustomerChatViewModel({
         const p = await fetchProfileByUserId(supabase, aid);
         if (cancelled) return;
         setAssignedStaffHeader(staffBubbleHeaderFromFullName(p?.full_name));
-        setAssignedWaiterLanguage(p?.language ?? null);
       } catch {
         if (!cancelled) {
           setAssignedStaffHeader(null);
-          setAssignedWaiterLanguage(null);
         }
       }
     })();
@@ -659,6 +672,20 @@ export function useCustomerChatViewModel({
             return [...prev, msg];
           });
           setLastReadAt(new Date().toISOString());
+
+          const langsAsync = latestLanguagesRef.current;
+          if (!langsAsync.length) return;
+          void (async () => {
+            try {
+              await ensureTranslationsForSession(supabase, sid, langsAsync);
+              if (sessionIdRef.current !== sid) return;
+              const fresh = await fetchMessagesBySession(supabase, sid);
+              if (sessionIdRef.current !== sid) return;
+              setMessages(fresh);
+            } catch (e) {
+              console.error('ensureTranslationsForSession:message-insert', e);
+            }
+          })();
         }
       )
       .on(
@@ -729,6 +756,20 @@ export function useCustomerChatViewModel({
             setSessionUsers((prev) => prev.filter((u) => u.id !== old.id));
             return;
           }
+          if (payload.eventType === 'INSERT') {
+            void (async () => {
+              try {
+                const langs = await refetchSessionLanguages();
+                latestLanguagesRef.current = langs;
+                await ensureTranslationsForSession(supabase, sid, langs);
+                const fresh = await fetchMessagesBySession(supabase, sid);
+                if (sessionIdRef.current !== sid) return;
+                setMessages(fresh);
+              } catch (e) {
+                console.error('ensureTranslationsForSession:session-users-insert', e);
+              }
+            })();
+          }
           const row = payload.new as SessionUser | undefined;
           if (!row?.id) return;
           if (row.id === sessionUser?.id) {
@@ -770,6 +811,7 @@ export function useCustomerChatViewModel({
     sessionUser?.id,
     flashTypingLine,
     resetToPreorderAfterSessionEnd,
+    refetchSessionLanguages,
   ]);
 
   const notifyTyping = useCallback(() => {
@@ -814,14 +856,8 @@ export function useCustomerChatViewModel({
       '';
     if (!rawLang) throw new Error('No user language');
     const original = normalizeLanguageCode(rawLang);
-    resolveCustomerOutgoingLanguages({
-      sessionUserLanguage: sessionUser.language,
-      selectedLanguage,
-      waiterLanguage: assignedWaiterLanguage,
-      restaurantDefaultLanguage,
-    });
     try {
-      const inserted = await insertMessage(supabase, {
+      await insertMessage(supabase, {
         session_id: sessionId,
         restaurant_id: session.restaurant_id,
         sender: 'customer',
@@ -830,26 +866,20 @@ export function useCustomerChatViewModel({
         user_identifier: sessionUser.user_identifier,
         original_language: original,
       });
-      // Traducciones solo a idiomas presentes en sesión (sin bloquear UI).
-      const langs = (sessionStore.languages ?? []).length
-        ? (sessionStore.languages ?? [])
-        : [original];
-      const targets = [...new Set(langs.map((l) => normalizeLanguageCode(l)))];
-      void (async () => {
-        try {
-          await upsertMessageTranslations(
-            supabase,
-            targets.map((lang) => ({
-              message_id: inserted.id,
-              language: lang,
-              translated_text:
-                lang === original ? body : mockTranslate(body, original, lang),
-            }))
-          );
-        } catch (e) {
-          console.error('sendMessage:translations', e);
-        }
-      })();
+      let langs = latestLanguagesRef.current;
+      if (!langs.length) {
+        langs = [
+          ...new Set(
+            (sessionStore.languages?.length
+              ? sessionStore.languages
+              : [original]
+            ).map((l) => normalizeLanguageCode(l))
+          ),
+        ];
+      }
+      await ensureTranslationsForSession(supabase, sessionId, langs);
+      const fresh = await fetchMessagesBySession(supabase, sessionId);
+      setMessages(fresh);
       if (!session.assigned_to) {
         try {
           await insertServiceRequest(supabase, {
@@ -876,8 +906,6 @@ export function useCustomerChatViewModel({
     sessionUser,
     selectedLanguage,
     initialLanguageHint,
-    assignedWaiterLanguage,
-    restaurantDefaultLanguage,
     sessionStore.sessionId,
     sessionStore.languages,
   ]);

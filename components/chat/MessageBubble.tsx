@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
+import { normalizeLanguageCode } from '@/constants/languages';
 import type { Message, SessionUser } from '@/lib/model/types';
 import { customerPeerHeaderLabels } from '@/lib/utils/chat-peer-label';
 
@@ -31,15 +32,15 @@ function PeerCustomerBubble({
   peerHeader,
   headerMuted,
   bubbleClass,
-  text,
-  translatedText,
+  primaryLine,
+  secondaryOriginalLine,
   translationMutedClass,
 }: {
   peerHeader: PeerHeaderFields;
   headerMuted: string;
   bubbleClass: string;
-  text: string;
-  translatedText?: string | null;
+  primaryLine: string;
+  secondaryOriginalLine?: string | null;
   translationMutedClass: string;
 }) {
   const [open, setOpen] = useState(false);
@@ -110,14 +111,16 @@ function PeerCustomerBubble({
         >
           {peerHeader.shortLabel}
         </span>
-        <p className="whitespace-pre-wrap text-[15px] leading-snug text-[#1F2937]">
-          {text}
+        <p className="whitespace-pre-wrap text-[15px] font-semibold leading-snug text-[#1F2937]">
+          {primaryLine}
         </p>
-        <p
-          className={`mt-1 whitespace-pre-wrap text-xs italic leading-snug ${translationMutedClass}`}
-        >
-          {translatedText?.trim() || '…'}
-        </p>
+        {secondaryOriginalLine?.trim() ? (
+          <p
+            className={`mt-1 whitespace-pre-wrap text-xs leading-snug opacity-60 ${translationMutedClass}`}
+          >
+            {secondaryOriginalLine.trim()}
+          </p>
+        ) : null}
       </div>
 
       {open ? (
@@ -185,13 +188,17 @@ export function MessageBubble({
   waiterIncomingBubbleLabel = null,
 }: MessageBubbleProps) {
   const text = message.text ?? '';
-  const viewerLang = (viewerLanguage ?? '').trim().toLowerCase() || null;
+  const viewerLangRaw = (viewerLanguage ?? '').trim();
+  const viewerNorm = viewerLangRaw ? normalizeLanguageCode(viewerLangRaw) : null;
   const originalLang =
     (message.original_language ?? '').trim().toLowerCase() || null;
-  const translationText =
-    message.translations?.find(
-      (t) => (t.language ?? '').trim().toLowerCase() === viewerLang
-    )?.translated_text ?? null;
+  const translation = viewerNorm
+    ? message.translations?.find(
+        (t) =>
+          t.message_id === message.id &&
+          normalizeLanguageCode(t.language ?? '') === viewerNorm
+      )
+    : undefined;
   const isLegacyUnlinked =
     (message.sender === 'waiter' || message.sender === 'customer') &&
     (!message.session_user_id || !message.user_identifier);
@@ -299,12 +306,10 @@ export function MessageBubble({
       ? 'text-amber-900/55'
       : 'text-[#9CA3AF]';
 
-  // Nuevo orden UX:
-  // - Línea principal: traducción al idioma del viewer si existe; si no, fallback al original.
-  // - Línea secundaria: original solo si el viewer es de idioma distinto.
-  const primaryLine = translationText?.trim() || text.trim() || '…';
-  const showOriginalLine = Boolean(viewerLang && originalLang && viewerLang !== originalLang);
-  const originalLine = text.trim() || '…';
+  const primaryLine =
+    (translation?.translated_text ?? '').trim() || text.trim() || '…';
+  const secondaryOriginalLine =
+    translation && text.trim() ? text.trim() : null;
 
   if (peerHeader) {
     return (
@@ -313,8 +318,8 @@ export function MessageBubble({
           peerHeader={peerHeader}
           headerMuted={headerMuted}
           bubbleClass={bubbleClass}
-          text={text}
-          translatedText={primaryLine}
+          primaryLine={primaryLine}
+          secondaryOriginalLine={secondaryOriginalLine}
           translationMutedClass={translationMutedClass}
         />
       </div>
@@ -330,13 +335,13 @@ export function MessageBubble({
           {headerLabel}
         </span>
         <p
-          className={`whitespace-pre-wrap text-[15px] leading-snug ${
+          className={`whitespace-pre-wrap text-[15px] font-semibold leading-snug ${
             variant === 'me' || variant === 'waiter_self'
               ? 'text-white'
               : 'text-[#1F2937]'
           }`}
         >
-          {text}
+          {primaryLine}
         </p>
         {isLegacyUnlinked ? (
           <p
@@ -345,11 +350,13 @@ export function MessageBubble({
             (legacy: mensaje sin vínculo de sesión)
           </p>
         ) : null}
-        <p
-          className={`mt-1 whitespace-pre-wrap text-xs italic leading-snug ${translationMutedClass}`}
-        >
-          {showOriginalLine ? originalLine : null}
-        </p>
+        {secondaryOriginalLine ? (
+          <p
+            className={`mt-1 whitespace-pre-wrap text-xs leading-snug opacity-60 ${translationMutedClass}`}
+          >
+            {secondaryOriginalLine}
+          </p>
+        ) : null}
         {showReadReceipts && variant === 'me' && (
           <div className="mt-1 flex justify-end text-[11px] tracking-tight text-white/75">
             <span aria-hidden title={isRead ? 'Leído' : 'Enviado'}>
