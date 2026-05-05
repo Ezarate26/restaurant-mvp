@@ -15,6 +15,7 @@ import {
   fetchActiveSessionsByRestaurant,
   fetchServiceSessionById,
 } from '@/lib/model/service-sessions.repository';
+import { fetchRestaurantDefaultLanguage } from '@/lib/model/restaurants.repository';
 import {
   claimAllPendingForSession,
   fetchPendingServiceRequestsByRestaurant,
@@ -35,6 +36,11 @@ import {
   resolveDashboardGate,
   signOutAndRedirect,
 } from '@/lib/viewmodels/dashboard-auth.helpers';
+import { useSessionStore } from '@/lib/stores/sessionStore';
+import { useEnsureSessionUser } from '@/lib/hooks/useEnsureSessionUser';
+import { normalizeLanguageCode } from '@/constants/languages';
+import { useSessionLanguages } from '@/lib/hooks/useSessionLanguages';
+import { ensureTranslationsForSession } from '@/lib/model/message-translations.repository';
 import type {
   Message,
   Profile,
@@ -54,6 +60,8 @@ type ChatTypingPayload = {
 
 export function useWaiterDashboardViewModel() {
   const router = useRouter();
+  const sessionStore = useSessionStore();
+  const ensureSessionUser = useEnsureSessionUser();
 
   const [user, setUser] = useState<User | null>(null);
   const [profile, setProfile] = useState<Profile | null>(null);
@@ -67,6 +75,10 @@ export function useWaiterDashboardViewModel() {
 
   const [activeSessionId, setActiveSessionId] = useState<string | null>(null);
   const activeSessionIdRef = useRef<string | null>(null);
+  const {
+    languages: sessionLanguages,
+    refetchSessionLanguages,
+  } = useSessionLanguages(activeSessionId);
 
   const [messages, setMessages] = useState<Message[]>([]);
   const [text, setText] = useState('');
@@ -75,6 +87,8 @@ export function useWaiterDashboardViewModel() {
   const [typingIndicator, setTypingIndicator] = useState<string | null>(null);
   const [finalizeBusy, setFinalizeBusy] = useState(false);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
+  const [restaurantDefaultLanguage, setRestaurantDefaultLanguage] =
+    useState<string>('es');
 
   const userIdRef = useRef<string | null>(null);
   const sessionUsersRef = useRef<SessionUser[]>([]);
@@ -83,10 +97,15 @@ export function useWaiterDashboardViewModel() {
   > | null>(null);
   const typingHideRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const lastTypingSentRef = useRef(0);
+  const latestLanguagesRef = useRef<string[]>([]);
 
   useEffect(() => {
     sessionUsersRef.current = sessionUsers;
   }, [sessionUsers]);
+
+  useEffect(() => {
+    latestLanguagesRef.current = sessionLanguages;
+  }, [sessionLanguages]);
 
   useEffect(() => {
     activeSessionIdRef.current = activeSessionId;
@@ -114,13 +133,15 @@ export function useWaiterDashboardViewModel() {
       setProfile(gate.profile);
       setRestaurantId(gate.profile.restaurant_id);
 
-      const [points, activeSessions, requests] = await Promise.all([
+      const [points, activeSessions, requests, defaultLang] = await Promise.all([
         fetchServicePointsByRestaurant(supabase, gate.profile.restaurant_id),
         fetchActiveSessionsByRestaurant(supabase, gate.profile.restaurant_id),
         fetchPendingServiceRequestsByRestaurant(supabase, gate.profile.restaurant_id),
+        fetchRestaurantDefaultLanguage(supabase, gate.profile.restaurant_id),
       ]);
 
       if (cancelled) return;
+      setRestaurantDefaultLanguage(defaultLang);
       setServicePoints(points);
       setSessions(activeSessions);
       setServiceRequests(requests);
@@ -262,6 +283,26 @@ export function useWaiterDashboardViewModel() {
             setSessionUsers((prev) => prev.filter((u) => u.id !== old.id));
             return;
           }
+          if (payload.eventType === 'INSERT') {
+            const ins = payload.new as SessionUser | undefined;
+            if (ins?.session_id === sid) {
+              void (async () => {
+                try {
+                  const langs = await refetchSessionLanguages();
+                  latestLanguagesRef.current = langs;
+                  await ensureTranslationsForSession(supabase, sid, langs);
+                  const fresh = await fetchMessagesBySession(supabase, sid);
+                  if (activeSessionIdRef.current !== sid) return;
+                  setMessages(fresh);
+                } catch (e) {
+                  console.error(
+                    'ensureTranslationsForSession:session-users-insert-waiter',
+                    e
+                  );
+                }
+              })();
+            }
+          }
           const row = payload.new as SessionUser | undefined;
           if (!row?.id || row.session_id !== sid) return;
 
@@ -292,14 +333,45 @@ export function useWaiterDashboardViewModel() {
         (payload) => {
           const msg = payload.new as Message;
           const isActive = msg.session_id === activeSessionIdRef.current;
+          if (
+            msg.sender !== 'system' &&
+            (!msg.session_user_id || !msg.user_identifier || !msg.original_language)
+          ) {
+            return;
+          }
 
           if (isActive) {
+            const sidActive = activeSessionIdRef.current;
             setMessages((prev) => {
               if (prev.some((m) => m.id === msg.id)) return prev;
               return [...prev, msg];
             });
             if (msg.session_id) {
               setUnread((prev) => ({ ...prev, [msg.session_id as string]: 0 }));
+            }
+            const langsLive = latestLanguagesRef.current;
+            if (sidActive && langsLive.length) {
+              void (async () => {
+                try {
+                  await ensureTranslationsForSession(
+                    supabase,
+                    sidActive,
+                    langsLive
+                  );
+                  if (activeSessionIdRef.current !== sidActive) return;
+                  const fresh = await fetchMessagesBySession(
+                    supabase,
+                    sidActive
+                  );
+                  if (activeSessionIdRef.current !== sidActive) return;
+                  setMessages(fresh);
+                } catch (e) {
+                  console.error(
+                    'ensureTranslationsForSession:waiter-message-insert',
+                    e
+                  );
+                }
+              })();
             }
             return;
           }
@@ -317,12 +389,49 @@ export function useWaiterDashboardViewModel() {
           }));
         }
       )
+      .on(
+        'postgres_changes',
+        {
+          event: 'INSERT',
+          schema: 'public',
+          table: 'message_translations',
+        },
+        (payload) => {
+          const tr = payload.new as {
+            message_id?: string | null;
+            language?: string | null;
+            translated_text?: string | null;
+          };
+          if (!tr?.message_id) return;
+          setMessages((prev) =>
+            prev.map((m) => {
+              if (m.id !== tr.message_id) return m;
+              const next = m.translations ? [...m.translations] : [];
+              const lang = (tr.language ?? '').trim().toLowerCase();
+              if (!lang) return m;
+              if (
+                next.some(
+                  (x) => (x.language ?? '').trim().toLowerCase() === lang
+                )
+              ) {
+                return m;
+              }
+              next.push({
+                message_id: m.id,
+                language: lang,
+                translated_text: tr.translated_text ?? null,
+              });
+              return { ...m, translations: next };
+            })
+          );
+        }
+      )
       .subscribe();
 
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [restaurantId]);
+  }, [restaurantId, refetchSessionLanguages]);
 
   useEffect(() => {
     if (!activeSessionId) {
@@ -423,19 +532,119 @@ export function useWaiterDashboardViewModel() {
   }, [router]);
 
   const openChat = useCallback(async (sessionId: string) => {
+    const sess = sessionsRef.current.find((s) => s.id === sessionId) ?? null;
     activeSessionIdRef.current = sessionId;
     setActiveSessionId(sessionId);
     setTypingIndicator(null);
     setUnread((prev) => ({ ...prev, [sessionId]: 0 }));
 
-    const [data, users] = await Promise.all([
+    const [data, usersRaw] = await Promise.all([
       fetchMessagesBySession(supabase, sessionId),
       fetchActiveSessionUsersBySession(supabase, sessionId),
     ]);
     if (activeSessionIdRef.current !== sessionId) return;
     setMessages(data);
+    // Evitar contaminar la lista de clientes con el mesero (el mesero también vive en session_users).
+    const users =
+      user?.id ? usersRaw.filter((u) => u.user_identifier !== user.id) : usersRaw;
     setSessionUsers(users);
-  }, []);
+
+    // Asegurar que el mesero tenga session_user y guardarlo en store para enviar mensajes.
+    if (user?.id) {
+      try {
+        const su = await ensureSessionUser({
+          sessionId,
+          userId: user.id,
+          profile,
+        });
+        const langs =
+          sessionLanguages.length > 0
+            ? sessionLanguages
+            : [
+                ...new Set(
+                  [profile?.language, ...usersRaw.map((u) => u.language)]
+                    .filter(
+                      (x): x is string =>
+                        typeof x === 'string' && Boolean(x.trim())
+                    )
+                    .map((x) => normalizeLanguageCode(x))
+                ),
+              ];
+        sessionStore.setSession({
+          sessionId,
+          servicePointId: sess?.service_point_id ?? null,
+          role: 'waiter',
+          profile,
+          sessionUser: su,
+          languages: langs,
+          users: [
+            { id: su.id, role: 'waiter' },
+            ...users.map((u) => ({ id: u.id, role: 'customer' as const })),
+          ],
+        });
+      } catch (e) {
+        console.error('openChat:ensureSessionUser', e);
+        // No bloquear UI; el envío de mensajes validará sessionUser.
+      }
+    }
+  }, [sessionStore, user?.id, profile, ensureSessionUser, sessionLanguages]);
+
+  useEffect(() => {
+    if (!activeSessionId) return;
+    if (!sessionLanguages.length) return;
+    // Mantener store alineado a idiomas activos DB.
+    sessionStore.setSession({
+      sessionId: activeSessionId,
+      servicePointId: sessionStore.servicePointId,
+      role: 'waiter',
+      profile: sessionStore.profile,
+      sessionUser: sessionStore.sessionUser,
+      languages: sessionLanguages,
+      users: sessionStore.users,
+    });
+  }, [activeSessionId, sessionLanguages]);
+
+  useEffect(() => {
+    if (!activeSessionId || !sessionLanguages.length) return;
+    let cancelled = false;
+    const sid = activeSessionId;
+    void (async () => {
+      try {
+        await ensureTranslationsForSession(supabase, sid, sessionLanguages);
+        if (cancelled || activeSessionIdRef.current !== sid) return;
+        const fresh = await fetchMessagesBySession(supabase, sid);
+        if (cancelled || activeSessionIdRef.current !== sid) return;
+        setMessages(fresh);
+      } catch (e) {
+        console.error('ensureTranslationsForSession:languages', e);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [activeSessionId, sessionLanguages]);
+
+  useEffect(() => {
+    if (!activeSessionId) return;
+    const langs = latestLanguagesRef.current;
+    if (!langs.length) return;
+    let cancelled = false;
+    const sid = activeSessionId;
+    void (async () => {
+      try {
+        await ensureTranslationsForSession(supabase, sid, langs);
+        if (cancelled || activeSessionIdRef.current !== sid) return;
+        const fresh = await fetchMessagesBySession(supabase, sid);
+        if (cancelled || activeSessionIdRef.current !== sid) return;
+        setMessages(fresh);
+      } catch (e) {
+        console.error('ensureTranslationsForSession:sessionId', e);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [activeSessionId]);
 
   const takeTable = useCallback(
     async (sessionId: string) => {
@@ -465,11 +674,22 @@ export function useWaiterDashboardViewModel() {
           )
         );
         await openChat(sessionId);
+        const langs = await refetchSessionLanguages();
+        latestLanguagesRef.current = langs;
+        try {
+          await ensureTranslationsForSession(supabase, sessionId, langs);
+          const freshMsgs = await fetchMessagesBySession(supabase, sessionId);
+          if (activeSessionIdRef.current === sessionId) {
+            setMessages(freshMsgs);
+          }
+        } catch (e) {
+          console.error('takeTable:ensureTranslationsForSession', e);
+        }
       } catch (e) {
         console.error('takeTable', e);
       }
     },
-    [user, openChat]
+    [user, openChat, refetchSessionLanguages]
   );
 
   const finalizeActiveSession = useCallback(async () => {
@@ -482,6 +702,7 @@ export function useWaiterDashboardViewModel() {
       setActiveSessionId(null);
       setMessages([]);
       setSessionUsers([]);
+      sessionStore.clearSession();
       setSessions((prev) => prev.filter((s) => s.id !== sid));
       setServiceRequests((prev) =>
         prev.filter((r) => r.service_session_id !== sid)
@@ -495,25 +716,57 @@ export function useWaiterDashboardViewModel() {
     } finally {
       setFinalizeBusy(false);
     }
-  }, [finalizeBusy]);
+  }, [finalizeBusy, sessionStore]);
 
   const sendMessage = useCallback(async () => {
     if (!activeSessionId || !text.trim() || !profile) return;
-    const sess = sessionsRef.current.find((s) => s.id === activeSessionId);
+    const sessionId = sessionStore.sessionId ?? activeSessionId;
+    if (!sessionId) throw new Error('No active session');
+    if (!sessionStore.sessionUser?.id) {
+      throw new Error('Waiter not linked to session');
+    }
+    const rawLang = profile?.language?.trim() ?? '';
+    if (!rawLang) throw new Error('No user language');
+    const sess = sessionsRef.current.find((s) => s.id === sessionId);
     if (!sess || sess.status !== 'active') return;
 
     try {
+      const original = normalizeLanguageCode(rawLang);
       await insertMessage(supabase, {
-        session_id: activeSessionId,
+        session_id: sessionId,
         restaurant_id: sess.restaurant_id,
         sender: 'waiter',
         text: text.trim(),
+        session_user_id: sessionStore.sessionUser.id,
+        user_identifier: sessionStore.sessionUser.user_identifier,
+        original_language: original,
       });
+      let langs = latestLanguagesRef.current;
+      if (!langs.length) {
+        langs = [
+          ...new Set(
+            (sessionStore.languages?.length
+              ? sessionStore.languages
+              : [original]
+            ).map((l) => normalizeLanguageCode(l))
+          ),
+        ];
+      }
+      await ensureTranslationsForSession(supabase, sessionId, langs);
+      const fresh = await fetchMessagesBySession(supabase, sessionId);
+      setMessages(fresh);
       setText('');
     } catch (e) {
       console.error('sendMessage', e);
     }
-  }, [activeSessionId, text, profile]);
+  }, [
+    activeSessionId,
+    text,
+    profile,
+    sessionStore.sessionId,
+    sessionStore.sessionUser,
+    sessionStore.languages,
+  ]);
 
   const notifyTyping = useCallback(() => {
     const ch = waiterSessionChannelRef.current;

@@ -1,12 +1,15 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
+import { normalizeLanguageCode } from '@/constants/languages';
 import type { Message, SessionUser } from '@/lib/model/types';
 import { customerPeerHeaderLabels } from '@/lib/utils/chat-peer-label';
 
 export interface MessageBubbleProps {
   message: Message;
   currentUserType: Exclude<Message['sender'], 'system'>;
+  /** Idioma del usuario que está viendo el chat (para elegir traducción). */
+  viewerLanguage?: string | null;
   /** Sesión actual del cliente (QR); obligatorio en vista cliente para multisesión. */
   currentSessionUserId?: string | null;
   /** Solo vista cliente: marca temporal local “leído” sin backend. */
@@ -29,12 +32,16 @@ function PeerCustomerBubble({
   peerHeader,
   headerMuted,
   bubbleClass,
-  text,
+  primaryLine,
+  secondaryOriginalLine,
+  translationMutedClass,
 }: {
   peerHeader: PeerHeaderFields;
   headerMuted: string;
   bubbleClass: string;
-  text: string;
+  primaryLine: string;
+  secondaryOriginalLine?: string | null;
+  translationMutedClass: string;
 }) {
   const [open, setOpen] = useState(false);
   const longPressTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -104,9 +111,16 @@ function PeerCustomerBubble({
         >
           {peerHeader.shortLabel}
         </span>
-        <p className="whitespace-pre-wrap text-[15px] leading-snug text-[#1F2937]">
-          {text}
+        <p className="whitespace-pre-wrap text-[15px] font-semibold leading-snug text-[#1F2937]">
+          {primaryLine}
         </p>
+        {secondaryOriginalLine?.trim() ? (
+          <p
+            className={`mt-1 whitespace-pre-wrap text-xs leading-snug opacity-60 ${translationMutedClass}`}
+          >
+            {secondaryOriginalLine.trim()}
+          </p>
+        ) : null}
       </div>
 
       {open ? (
@@ -166,6 +180,7 @@ function parseTime(iso: string | undefined | null): number | null {
 export function MessageBubble({
   message,
   currentUserType,
+  viewerLanguage = null,
   currentSessionUserId,
   lastReadAt,
   showReadReceipts = false,
@@ -173,6 +188,26 @@ export function MessageBubble({
   waiterIncomingBubbleLabel = null,
 }: MessageBubbleProps) {
   const text = message.text ?? '';
+  const viewerLangRaw = (viewerLanguage ?? '').trim();
+  const viewerNorm = viewerLangRaw ? normalizeLanguageCode(viewerLangRaw) : null;
+  const originalLang =
+    (message.original_language ?? '').trim().toLowerCase() || null;
+  const translation = viewerNorm
+    ? message.translations?.find(
+        (t) =>
+          t.message_id === message.id &&
+          normalizeLanguageCode(t.language ?? '') === viewerNorm
+      )
+    : undefined;
+  const isLegacyUnlinked =
+    (message.sender === 'waiter' || message.sender === 'customer') &&
+    (!message.session_user_id || !message.user_identifier);
+  const isInvalidParticipantMessage =
+    (message.sender === 'waiter' || message.sender === 'customer') &&
+    (!message.session_user_id ||
+      !message.user_identifier ||
+      !originalLang ||
+      !text.trim());
 
   if (message.sender === 'system') {
     return (
@@ -185,6 +220,9 @@ export function MessageBubble({
       </div>
     );
   }
+
+  // Mensajes antiguos o incompletos: no romper UI ni mezclar con chat activo.
+  if (isInvalidParticipantMessage) return null;
 
   const isWaiterMessage = message.sender === 'waiter';
   const isCustomerMessage = message.sender === 'customer';
@@ -261,6 +299,18 @@ export function MessageBubble({
   const staffHeaderClass =
     'mb-0.5 block max-w-[85%] text-[11px] font-semibold leading-snug normal-case tracking-normal';
 
+  const translationMutedClass =
+    variant === 'me' || variant === 'waiter_self'
+      ? 'text-white/70'
+      : variant === 'waiter_in'
+      ? 'text-amber-900/55'
+      : 'text-[#9CA3AF]';
+
+  const primaryLine =
+    (translation?.translated_text ?? '').trim() || text.trim() || '…';
+  const secondaryOriginalLine =
+    translation && text.trim() ? text.trim() : null;
+
   if (peerHeader) {
     return (
       <div className={`flex w-full ${rowAlign}`}>
@@ -268,7 +318,9 @@ export function MessageBubble({
           peerHeader={peerHeader}
           headerMuted={headerMuted}
           bubbleClass={bubbleClass}
-          text={text}
+          primaryLine={primaryLine}
+          secondaryOriginalLine={secondaryOriginalLine}
+          translationMutedClass={translationMutedClass}
         />
       </div>
     );
@@ -283,14 +335,28 @@ export function MessageBubble({
           {headerLabel}
         </span>
         <p
-          className={`whitespace-pre-wrap text-[15px] leading-snug ${
+          className={`whitespace-pre-wrap text-[15px] font-semibold leading-snug ${
             variant === 'me' || variant === 'waiter_self'
               ? 'text-white'
               : 'text-[#1F2937]'
           }`}
         >
-          {text}
+          {primaryLine}
         </p>
+        {isLegacyUnlinked ? (
+          <p
+            className={`mt-1 whitespace-pre-wrap text-[11px] italic leading-snug ${translationMutedClass}`}
+          >
+            (legacy: mensaje sin vínculo de sesión)
+          </p>
+        ) : null}
+        {secondaryOriginalLine ? (
+          <p
+            className={`mt-1 whitespace-pre-wrap text-xs leading-snug opacity-60 ${translationMutedClass}`}
+          >
+            {secondaryOriginalLine}
+          </p>
+        ) : null}
         {showReadReceipts && variant === 'me' && (
           <div className="mt-1 flex justify-end text-[11px] tracking-tight text-white/75">
             <span aria-hidden title={isRead ? 'Leído' : 'Enviado'}>

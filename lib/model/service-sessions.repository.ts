@@ -82,9 +82,25 @@ export async function getOrCreateActiveSessionForPoint(
     .single();
 
   if (insErr) {
+    // Race protection: if another client created the active session at the same time,
+    // a unique constraint on (service_point_id, status='active') should reject the insert.
+    if (insErr.code === '23505') {
+      const { data: raced } = await client
+        .from('service_sessions')
+        .select('*')
+        .eq('service_point_id', point.id)
+        .eq('status', 'active')
+        .order('started_at', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      if (raced) return raced as ServiceSession;
+    }
+
     console.error('getOrCreateActiveSessionForPoint:insert', insErr);
     throw insErr;
   }
+
   return inserted as ServiceSession;
 }
 

@@ -205,6 +205,7 @@ function CustomerChatBound({
         newSessionBusy={vm.newSessionBusy}
         onStartNewSession={() => void vm.startNewSessionAfterClose()}
         currentSessionUserId={vm.sessionUser?.id ?? null}
+        viewerLanguage={vm.sessionUser?.language ?? vm.selectedLanguage ?? 'es'}
         lastReadAt={vm.lastReadAt}
         typingIndicator={vm.typingIndicator}
         onMessagesScroll={vm.handleMessagesScroll}

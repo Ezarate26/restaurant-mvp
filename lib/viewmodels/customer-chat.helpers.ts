@@ -13,9 +13,17 @@ export async function loadChatSnapshot(
     fetchMessagesBySession(client, sessionId),
     fetchActiveSessionUsersBySession(client, sessionId),
   ]);
-  const tail = messages.at(-1)?.created_at ?? null;
+  const valid = messages.filter(
+    (m) =>
+      m.sender === 'system' ||
+      (Boolean(m.session_user_id) &&
+        Boolean(m.user_identifier) &&
+        Boolean(m.original_language) &&
+        Boolean((m.text ?? '').trim()))
+  );
+  const tail = valid.at(-1)?.created_at ?? null;
   return {
-    messages,
+    messages: valid,
     sessionUsers,
     lastReadAt: tail ?? new Date().toISOString(),
   };

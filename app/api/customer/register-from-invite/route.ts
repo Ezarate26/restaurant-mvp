@@ -9,13 +9,11 @@ import {
   captureActiveTableResumeFromDevice,
   resolveExplicitResumeSessionOnPoint,
 } from '@/lib/server/session-users-global-release';
-import { APP_LANGUAGE_OPTIONS } from '@/lib/model/language-options';
+import { LANGUAGE_CODES } from '@/constants/languages';
 
 export const runtime = 'nodejs';
 
-const ALLOWED_LANG_CODES = new Set(
-  APP_LANGUAGE_OPTIONS.map((o) => o.code as string)
-);
+const ALLOWED_LANG_CODES = LANGUAGE_CODES;
 
 type Body = {
   email?: string | null;

@@ -124,10 +124,27 @@ export interface MessageSessionUserJoin {
   email?: string | null;
 }
 
+export interface MessageTranslation {
+  id?: string;
+  message_id: string;
+  language: string;
+  translated_text: string | null;
+  created_at?: string | null;
+}
+
 export interface Message {
   id: string;
   sender: MessageSender | null;
   text: string | null;
+  /** Idioma en que escribió el remitente. */
+  original_language?: string | null;
+  /**
+   * Legacy: traducción 1:1 en tabla `messages` (se conserva para compat).
+   * Nuevo flujo: usar `translations[]` desde `message_translations`.
+   */
+  translated_text?: string | null;
+  translated_language?: string | null;
+  translations?: MessageTranslation[] | null;
   restaurant_id: string | null;
   session_id: string | null;
   session_user_id: string | null;

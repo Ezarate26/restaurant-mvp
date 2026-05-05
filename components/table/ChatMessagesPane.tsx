@@ -7,6 +7,7 @@ import type { Message, SessionUser } from '@/lib/model/types';
 type ChatMessagesPaneProps = {
   messages: Message[];
   currentSessionUserId?: string | null;
+  viewerLanguage?: string | null;
   lastReadAt?: string | null;
   sessionUsers?: SessionUser[];
   waiterIncomingBubbleLabel?: string | null;
@@ -17,6 +18,7 @@ type ChatMessagesPaneProps = {
 export function ChatMessagesPane({
   messages,
   currentSessionUserId = null,
+  viewerLanguage = null,
   lastReadAt = null,
   sessionUsers = [],
   waiterIncomingBubbleLabel = null,
@@ -45,6 +47,7 @@ export function ChatMessagesPane({
           message={m}
           currentUserType="customer"
           currentSessionUserId={currentSessionUserId}
+          viewerLanguage={viewerLanguage}
           lastReadAt={lastReadAt}
           showReadReceipts
           sessionUsers={sessionUsers}
