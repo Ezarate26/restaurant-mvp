@@ -1,6 +1,6 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { normalizeLanguageCode } from '@/constants/languages';
-import { mockTranslate } from '@/features/translation/translation.service';
+import { translateMessage } from '@/features/translation/translation.service';
 import type { MessageTranslation } from './types';
 
 type TranslationInsertRow = {
@@ -98,7 +98,14 @@ export async function ensureTranslationsForSession(
     )
   );
 
-  const missing: TranslationInsertRow[] = [];
+  type Pending = {
+    message_id: string;
+    language: string;
+    body: string;
+    orig: string;
+  };
+
+  const pending: Pending[] = [];
 
   for (const msg of rows) {
     const mid = msg.id as string;
@@ -114,15 +121,19 @@ export async function ensureTranslationsForSession(
       const key = `${mid}-${lang}`;
       if (existingSet.has(key)) continue;
 
-      missing.push({
-        message_id: mid,
-        language: lang,
-        translated_text: mockTranslate(body, orig, lang),
-      });
+      pending.push({ message_id: mid, language: lang, body, orig });
     }
   }
 
-  if (!missing.length) return;
+  if (!pending.length) return;
+
+  const missing: TranslationInsertRow[] = await Promise.all(
+    pending.map(async (p) => ({
+      message_id: p.message_id,
+      language: p.language,
+      translated_text: await translateMessage(client, p.body, p.orig, p.language),
+    }))
+  );
 
   const CHUNK = 500;
   for (let i = 0; i < missing.length; i += CHUNK) {
