@@ -30,12 +30,23 @@ export async function translateMessage(
   if (!text.trim()) return '';
   if (from === to) return text;
 
+  console.log('[TRANSLATE] calling edge function', {
+    text,
+    from,
+    to,
+  });
+
   try {
     const { data, error } = await client.functions.invoke('translate-message', {
       body: { text, from, to },
     });
 
-    if (error) throw error;
+    if (error) {
+      console.error('[TRANSLATE ERROR]', error);
+      return text;
+    }
+
+    console.log('[TRANSLATE RESULT]', data);
 
     const translation =
       data &&
@@ -50,9 +61,7 @@ export async function translateMessage(
 
     return text;
   } catch (e) {
-    console.error('translation error', e);
-    // Fallback mock durante pruebas:
-    // return mockTranslate(text, from, to);
+    console.error('[TRANSLATE ERROR]', e);
     return text;
   }
 }
