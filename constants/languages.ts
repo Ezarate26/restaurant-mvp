@@ -73,3 +73,9 @@ export function normalizeLanguageCode(code: string | null | undefined): string {
   const c = (code ?? 'es').trim().toLowerCase();
   return LANGUAGE_CODES.has(c) ? c : 'es';
 }
+
+/** Etiqueta corta para UI (p. ej. burbuja de chat). */
+export function languageDisplayName(code: string | null | undefined): string {
+  const c = normalizeLanguageCode(code);
+  return LANGUAGES.find((l) => l.code === c)?.name ?? c.toUpperCase();
+}

@@ -29,18 +29,13 @@ export async function loadChatSnapshot(
   };
 }
 
+/** Prioriza idioma de UI / sesión; no usa `customers.languages` ni perfiles. */
 export function resolvePreferredLanguage(input: {
-  customerLanguages?: string[] | null;
   selectedLanguage?: string | null;
   sessionUserLanguage?: string | null;
   initialLanguageHint?: string | null;
 }): string {
-  const pref =
-    input.customerLanguages
-      ?.find((c) => typeof c === 'string' && c.trim())
-      ?.trim() ?? null;
   return (
-    pref ||
     input.selectedLanguage?.trim() ||
     input.sessionUserLanguage?.trim() ||
     input.initialLanguageHint?.trim() ||

@@ -10,6 +10,7 @@ import {
 import { archiveOtherSessionUsersForLinkedCustomer } from '@/lib/server/session-users-global-release';
 import { getOrCreateActiveSessionForPoint } from '@/lib/model/service-sessions.repository';
 import type { ServicePoint, ServiceSession } from '@/lib/model/types';
+import { normalizeLanguageCode } from '@/constants/languages';
 
 export const runtime = 'nodejs';
 
@@ -145,12 +146,7 @@ export async function POST(req: Request) {
 
     const usernameTrim = (customer.username ?? '').trim();
     const langs = (customer as { languages?: string[] | null }).languages;
-    const primaryLang =
-      languageHint ||
-      (Array.isArray(langs)
-        ? langs.find((c) => typeof c === 'string' && c.trim())?.trim()
-        : undefined) ||
-      'es';
+    const primaryLang = normalizeLanguageCode(languageHint || 'es');
 
     const customerEmailNorm = ((customer.email ?? email) as string).trim().toLowerCase();
 
@@ -234,19 +230,34 @@ export async function POST(req: Request) {
         }
       }
 
-      const { data: updated, error: upErr } = await admin
-        .from('session_users')
-        .update({
-          customer_id: customer.id,
-          display_name: displayName,
-          username: usernameTrim || null,
-          email: (customer.email ?? email).trim(),
-          is_profile_completed: true,
-          registration_invited: false,
-        })
-        .eq('id', sessionUserId)
-        .select('*')
-        .maybeSingle();
+      const linkedPatch: Record<string, unknown> = {
+        customer_id: customer.id,
+        display_name: displayName,
+        username: usernameTrim || null,
+        email: (customer.email ?? email).trim(),
+        is_profile_completed: true,
+        registration_invited: false,
+        is_active: true,
+        language: primaryLang,
+      };
+
+      const tryLinkedUpdate = async (patch: Record<string, unknown>) =>
+        admin
+          .from('session_users')
+          .update(patch)
+          .eq('id', sessionUserId)
+          .select('*')
+          .maybeSingle();
+
+      let { data: updated, error: upErr } = await tryLinkedUpdate(linkedPatch);
+
+      if (
+        upErr &&
+        /is_active|schema cache|column/i.test(upErr.message ?? '')
+      ) {
+        const { is_active: _ia, ...rest } = linkedPatch;
+        ({ data: updated, error: upErr } = await tryLinkedUpdate(rest));
+      }
 
       if (upErr) {
         console.error('login-customer:update', upErr);

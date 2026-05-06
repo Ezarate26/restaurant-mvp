@@ -1,7 +1,10 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
-import { normalizeLanguageCode } from '@/constants/languages';
+import {
+  languageDisplayName,
+  normalizeLanguageCode,
+} from '@/constants/languages';
 import type { Message, SessionUser } from '@/lib/model/types';
 import { customerPeerHeaderLabels } from '@/lib/utils/chat-peer-label';
 
@@ -308,8 +311,13 @@ export function MessageBubble({
 
   const primaryLine =
     (translation?.translated_text ?? '').trim() || text.trim() || '…';
+  const trimmedOriginal = text.trim();
   const secondaryOriginalLine =
-    translation && text.trim() ? text.trim() : null;
+    trimmedOriginal && primaryLine.trim() !== trimmedOriginal
+      ? trimmedOriginal
+      : null;
+  const viewerLanguageCaption =
+    viewerNorm != null ? languageDisplayName(viewerNorm) : null;
 
   if (peerHeader) {
     return (

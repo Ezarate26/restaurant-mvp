@@ -34,9 +34,10 @@ import {
   type LoginCustomerResponse,
 } from '@/lib/viewmodels/customer-chat.helpers';
 import { useSessionStore } from '@/lib/stores/sessionStore';
-import { ensureTranslationsForSession } from '@/lib/model/message-translations.repository';
+import { ensureTranslationsForNewMessage } from '@/lib/model/message-translations.repository';
 import { normalizeLanguageCode } from '@/constants/languages';
 import { useSessionLanguages } from '@/lib/hooks/useSessionLanguages';
+import { useMessageSender } from '@/lib/hooks/useMessageSender';
 import type {
   Message,
   ServicePoint,
@@ -113,6 +114,8 @@ export function useCustomerChatViewModel({
     refetchSessionLanguages,
   } = useSessionLanguages(chatActive ? session?.id ?? null : null);
 
+  const { handleSendMessage, hydrateViewerMessages } = useMessageSender();
+
   const sessionIdRef = useRef<string | null>(null);
   const latestLanguagesRef = useRef<string[]>([]);
   const sessionUsersRef = useRef<SessionUser[]>([]);
@@ -138,76 +141,24 @@ export function useCustomerChatViewModel({
 
   useEffect(() => {
     if (!chatActive || !session?.id) return;
-    const fromHook =
-      sessionLanguages.length > 0 ? sessionLanguages : null;
-    const uniq =
-      fromHook ??
-      [
-        ...new Set(
-          [sessionUser?.language, ...sessionUsers.map((u) => u.language)]
-            .filter((x): x is string => typeof x === 'string' && Boolean(x.trim()))
-            .map((x) => normalizeLanguageCode(x))
-        ),
-      ];
-    if (uniq.length === 0) return;
+    if (!sessionLanguages.length) return;
     sessionStore.setSession({
       sessionId: session.id,
       servicePointId: point?.id ?? null,
       role: 'customer',
       profile: sessionStore.profile,
       sessionUser: sessionStore.sessionUser ?? sessionUser,
-      languages: uniq,
+      languages: sessionLanguages,
       users: sessionStore.users,
     });
   }, [
     chatActive,
     session?.id,
-    sessionUsers,
-    sessionUser?.language,
+    sessionUser,
     sessionLanguages,
+    sessionStore,
+    point?.id,
   ]);
-
-  useEffect(() => {
-    if (!chatActive || !session?.id || !sessionLanguages.length) return;
-    let cancelled = false;
-    const sid = session.id;
-    void (async () => {
-      try {
-        await ensureTranslationsForSession(supabase, sid, sessionLanguages);
-        if (cancelled || sessionIdRef.current !== sid) return;
-        const fresh = await fetchMessagesBySession(supabase, sid);
-        if (cancelled || sessionIdRef.current !== sid) return;
-        setMessages(fresh);
-      } catch (e) {
-        console.error('ensureTranslationsForSession:languages', e);
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [chatActive, session?.id, sessionLanguages]);
-
-  useEffect(() => {
-    if (!chatActive || !session?.id) return;
-    const langs = latestLanguagesRef.current;
-    if (!langs.length) return;
-    let cancelled = false;
-    const sid = session.id;
-    void (async () => {
-      try {
-        await ensureTranslationsForSession(supabase, sid, langs);
-        if (cancelled || sessionIdRef.current !== sid) return;
-        const fresh = await fetchMessagesBySession(supabase, sid);
-        if (cancelled || sessionIdRef.current !== sid) return;
-        setMessages(fresh);
-      } catch (e) {
-        console.error('ensureTranslationsForSession:sessionId', e);
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [chatActive, session?.id]);
 
   /** Aviso tipo banner (p. ej. correo enviado): desaparece solo a los 5 s. */
   useEffect(() => {
@@ -310,17 +261,35 @@ export function useCustomerChatViewModel({
     autoOpenChatAttemptedRef.current = false;
   }, [servicePointId, preferredSessionId, autoOpenChatAfterLoad]);
 
-  const selectLanguage = useCallback(async (code: string) => {
-    setSelectedLanguage(code);
-    const suId = sessionUser?.id;
-    if (!suId) return;
-    try {
-      const updated = await updateSessionUserLanguage(supabase, suId, code);
-      setSessionUser(updated);
-    } catch (e) {
-      console.error('selectLanguage', e);
-    }
-  }, [sessionUser?.id]);
+  const selectLanguage = useCallback(
+    async (code: string) => {
+      setSelectedLanguage(code);
+      const suId = sessionUser?.id;
+      if (!suId) return;
+      try {
+        const updated = await updateSessionUserLanguage(supabase, suId, code);
+        setSessionUser(updated);
+        const sid = session?.id;
+        if (chatActive && sid) {
+          const norm = normalizeLanguageCode(code);
+          const { messages: hydrated } = await hydrateViewerMessages({
+            sessionId: sid,
+            viewerLanguage: norm,
+            latestLanguagesRef,
+          });
+          setMessages(hydrated);
+        }
+      } catch (e) {
+        console.error('selectLanguage', e);
+      }
+    },
+    [
+      sessionUser?.id,
+      session?.id,
+      chatActive,
+      hydrateViewerMessages,
+    ]
+  );
 
   const ensureSessionAndParticipant = useCallback(async (): Promise<{
     session: ServiceSession;
@@ -395,6 +364,19 @@ export function useCustomerChatViewModel({
       setSessionUsers(snapshot.sessionUsers);
       setLastReadAt(snapshot.lastReadAt);
       setChatActive(true);
+      const viewLang = normalizeLanguageCode(
+        updated.language?.trim() || lang
+      );
+      try {
+        const { messages: hydrated } = await hydrateViewerMessages({
+          sessionId: sess.id,
+          viewerLanguage: viewLang,
+          latestLanguagesRef,
+        });
+        setMessages(hydrated);
+      } catch (hydrateErr) {
+        console.error('confirmEnterChat:hydrateViewer', hydrateErr);
+      }
     } catch (e) {
       console.error('confirmEnterChat', e);
       setError('No se pudo abrir el chat. Intenta de nuevo.');
@@ -406,6 +388,7 @@ export function useCustomerChatViewModel({
     selectedLanguage,
     initialLanguageHint,
     ensureSessionAndParticipant,
+    hydrateViewerMessages,
   ]);
 
   const loginCustomerAccount = useCallback(
@@ -446,6 +429,7 @@ export function useCustomerChatViewModel({
               email,
               password,
               deviceId,
+              language: lang,
             }),
           });
           data = (await res.json()) as LoginCustomerResponse;
@@ -494,18 +478,19 @@ export function useCustomerChatViewModel({
         if (sid) {
           if (!chatActive) {
             const lang = resolvePreferredLanguage({
-              customerLanguages: data.customer?.languages ?? null,
               selectedLanguage,
               sessionUserLanguage: data.sessionUser?.language ?? null,
               initialLanguageHint,
             });
             try {
+              let customerSu = data.sessionUser as SessionUser;
               if (data.sessionUser?.id) {
                 const updated = await updateSessionUserLanguage(
                   supabase,
                   data.sessionUser.id,
                   lang
                 );
+                customerSu = updated;
                 setSessionUser(updated);
                 setSelectedLanguage(lang);
               }
@@ -514,12 +499,25 @@ export function useCustomerChatViewModel({
               setSessionUsers(snapshot.sessionUsers);
               setLastReadAt(snapshot.lastReadAt);
               setChatActive(true);
-              if (data.sessionUser?.id) {
+              const langNorm = normalizeLanguageCode(
+                customerSu.language?.trim() || lang
+              );
+              const { messages: syncedMessages } =
+                await hydrateViewerMessages({
+                  sessionId: sid,
+                  viewerLanguage: langNorm,
+                  latestLanguagesRef,
+                });
+              setMessages(syncedMessages);
+              if (customerSu.id) {
                 sessionStore.setSession({
                   sessionId: sid,
                   servicePointId: point.id,
                   role: 'customer',
-                  users: [{ id: data.sessionUser.id, role: 'customer' }],
+                  users: [{ id: customerSu.id, role: 'customer' }],
+                  languages: latestLanguagesRef.current.length
+                    ? latestLanguagesRef.current
+                    : [langNorm],
                 });
               }
             } catch (e) {
@@ -529,17 +527,18 @@ export function useCustomerChatViewModel({
           } else {
             try {
               const prefLang = resolvePreferredLanguage({
-                customerLanguages: data.customer?.languages ?? null,
-                selectedLanguage: null,
-                sessionUserLanguage: null,
-                initialLanguageHint: null,
+                selectedLanguage,
+                sessionUserLanguage: data.sessionUser?.language ?? null,
+                initialLanguageHint,
               });
+              let customerSu = data.sessionUser as SessionUser;
               if (prefLang && data.sessionUser?.id) {
                 const updated = await updateSessionUserLanguage(
                   supabase,
                   data.sessionUser.id,
                   prefLang
                 );
+                customerSu = updated;
                 setSessionUser(updated);
                 setSelectedLanguage(prefLang);
               }
@@ -548,6 +547,28 @@ export function useCustomerChatViewModel({
                 sid
               );
               setSessionUsers(users);
+              const langNorm = normalizeLanguageCode(
+                customerSu.language?.trim() ||
+                  prefLang ||
+                  lang ||
+                  'es'
+              );
+              const { messages: syncedMessages } =
+                await hydrateViewerMessages({
+                  sessionId: sid,
+                  viewerLanguage: langNorm,
+                  latestLanguagesRef,
+                });
+              setMessages(syncedMessages);
+              sessionStore.setSession({
+                sessionId: sid,
+                servicePointId: point.id,
+                role: 'customer',
+                users: [{ id: customerSu.id, role: 'customer' }],
+                languages: latestLanguagesRef.current.length
+                  ? latestLanguagesRef.current
+                  : [langNorm],
+              });
             } catch (e) {
               console.error('loginCustomerAccount:refreshUsers', e);
             }
@@ -568,6 +589,7 @@ export function useCustomerChatViewModel({
       selectedLanguage,
       initialLanguageHint,
       sessionStore,
+      hydrateViewerMessages,
     ]
   );
 
@@ -673,17 +695,15 @@ export function useCustomerChatViewModel({
           });
           setLastReadAt(new Date().toISOString());
 
-          const langsAsync = latestLanguagesRef.current;
-          if (!langsAsync.length) return;
           void (async () => {
             try {
-              await ensureTranslationsForSession(supabase, sid, langsAsync);
+              await ensureTranslationsForNewMessage(supabase, sid, msg);
               if (sessionIdRef.current !== sid) return;
               const fresh = await fetchMessagesBySession(supabase, sid);
               if (sessionIdRef.current !== sid) return;
               setMessages(fresh);
             } catch (e) {
-              console.error('ensureTranslationsForSession:message-insert', e);
+              console.error('ensureTranslationsForNewMessage:message-insert', e);
             }
           })();
         }
@@ -761,12 +781,8 @@ export function useCustomerChatViewModel({
               try {
                 const langs = await refetchSessionLanguages();
                 latestLanguagesRef.current = langs;
-                await ensureTranslationsForSession(supabase, sid, langs);
-                const fresh = await fetchMessagesBySession(supabase, sid);
-                if (sessionIdRef.current !== sid) return;
-                setMessages(fresh);
               } catch (e) {
-                console.error('ensureTranslationsForSession:session-users-insert', e);
+                console.error('refetchSessionLanguages:session-users-insert', e);
               }
             })();
           }
@@ -857,29 +873,19 @@ export function useCustomerChatViewModel({
     if (!rawLang) throw new Error('No user language');
     const original = normalizeLanguageCode(rawLang);
     try {
-      await insertMessage(supabase, {
-        session_id: sessionId,
-        restaurant_id: session.restaurant_id,
-        sender: 'customer',
-        text: body,
-        session_user_id: sessionUser.id,
-        user_identifier: sessionUser.user_identifier,
-        original_language: original,
+      const { messages: updatedMessages } = await handleSendMessage({
+        insertRow: {
+          session_id: sessionId,
+          restaurant_id: session.restaurant_id,
+          sender: 'customer',
+          text: body,
+          session_user_id: sessionUser.id,
+          user_identifier: sessionUser.user_identifier,
+          original_language: original,
+        },
+        latestLanguagesRef,
       });
-      let langs = latestLanguagesRef.current;
-      if (!langs.length) {
-        langs = [
-          ...new Set(
-            (sessionStore.languages?.length
-              ? sessionStore.languages
-              : [original]
-            ).map((l) => normalizeLanguageCode(l))
-          ),
-        ];
-      }
-      await ensureTranslationsForSession(supabase, sessionId, langs);
-      const fresh = await fetchMessagesBySession(supabase, sessionId);
-      setMessages(fresh);
+      setMessages(updatedMessages);
       if (!session.assigned_to) {
         try {
           await insertServiceRequest(supabase, {
@@ -907,7 +913,7 @@ export function useCustomerChatViewModel({
     selectedLanguage,
     initialLanguageHint,
     sessionStore.sessionId,
-    sessionStore.languages,
+    handleSendMessage,
   ]);
 
   const callWaiter = useCallback(async () => {

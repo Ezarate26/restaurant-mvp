@@ -26,6 +26,7 @@ export type SessionStoreState = {
     role: Exclude<SessionRole, null>;
     profile?: Profile | null;
     sessionUser?: SessionUser | null;
+    /** Si se omite, no se tocan los idiomas ya guardados (evita borrar `languages` en login parcial). */
     languages?: string[];
     users?: SessionStoreUser[];
   }) => void;
@@ -58,7 +59,7 @@ export function SessionStoreProvider({ children }: { children: ReactNode }) {
         role: r,
         profile: p = null,
         sessionUser: su = null,
-        languages: langs = [],
+        languages: langs,
         users: u,
       }) => {
         setSessionId(sid);
@@ -66,7 +67,9 @@ export function SessionStoreProvider({ children }: { children: ReactNode }) {
         setRole(r);
         setProfile(p);
         setSessionUser(su);
-        setLanguages(langs);
+        if (langs !== undefined) {
+          setLanguages(langs);
+        }
         setUsers(u ?? []);
       },
       clearSession: () => {
