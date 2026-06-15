@@ -1,5 +1,5 @@
-import { RegisterRestaurantWizard } from '@/components/register/RegisterRestaurantWizard';
+import { redirect } from 'next/navigation';
 
-export default function RegisterRestaurantPage() {
-  return <RegisterRestaurantWizard />;
+export default function RegisterRestaurantLegacyRedirect() {
+  redirect('/create');
 }

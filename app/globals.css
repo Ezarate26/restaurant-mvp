@@ -1,38 +1,517 @@
 @import "tailwindcss";
 
-:root {
-  --background: #f4f6f8;
-  --foreground: #1f2937;
+/* ── Nebula Dark (default) ── */
+:root,
+[data-theme='nebula-dark'] {
+  --background: #12131a;
+  --foreground: #ffffff;
+
+  --app-bg: #12131a;
+  --app-sidebar: #181a22;
+  --app-card: #1f2230;
+  --app-surface: #1f2230;
+  --app-surface-2: #242938;
+  --app-text: #ffffff;
+  --app-muted: #b6bed6;
+  --app-border: rgba(255, 255, 255, 0.08);
+  --app-primary: #8b5cf6;
+  --app-accent: #ec4899;
+  --app-hover: #a855f7;
+  --app-hover-bg: rgba(168, 85, 247, 0.12);
+  --app-success: #22c55e;
+  --app-danger: #f43f5e;
+  --app-warning: #fbbf24;
+
+  --app-gradient: linear-gradient(135deg, #8b5cf6, #ec4899);
+
+  --app-panel: var(--app-sidebar);
+  --app-panel-hover: var(--app-hover-bg);
+
+  --chat-bg: #1a1d27;
+  --chat-input-bg: #f8f9fc;
+  --chat-input-text: #1a1d29;
+  --chat-input-placeholder: #6b7280;
+  --chat-accent: #8b5cf6;
+
+  --bubble-out: linear-gradient(135deg, #8b5cf6, #ec4899);
+  --bubble-out-text: #ffffff;
+  --bubble-in: #242938;
+  --bubble-in-text: #ffffff;
+  --bubble-in-border: transparent;
+
+  --glass-bg: rgba(31, 34, 48, 0.82);
+  --glass-border: rgba(255, 255, 255, 0.1);
+
+  --modal-bg: var(--glass-bg);
+  --modal-text: var(--app-text);
+  --modal-muted: var(--app-muted);
+  --modal-border: var(--glass-border);
+
+  --form-bg: var(--app-card);
+  --form-text: var(--app-text);
+  --form-placeholder: var(--app-muted);
+  --form-border: var(--app-border);
+
+  --overlay-bg: rgba(0, 0, 0, 0.55);
+
+  --landing-overlay: rgba(18, 19, 26, 0.82);
+  --landing-blob-1: rgba(139, 92, 246, 0.45);
+  --landing-blob-2: rgba(236, 72, 153, 0.3);
+
+  --badge-lang-bg: linear-gradient(
+    135deg,
+    rgba(139, 92, 246, 0.35),
+    rgba(236, 72, 153, 0.25)
+  );
+  --badge-lang-border: rgba(168, 85, 247, 0.45);
+  --badge-lang-text: #ede9fe;
+
+  --status-processing: #a855f7;
+  --status-pending: #b6bed6;
+  --status-done: #22c55e;
+}
+
+/* ── Nebula Light ── */
+[data-theme='nebula-light'] {
+  --background: #f8f9fd;
+  --foreground: #1a1d29;
+
+  --app-bg: #f8f9fd;
+  --app-sidebar: #ffffff;
+  --app-card: #ffffff;
+  --app-surface: #ffffff;
+  --app-surface-2: #f3f4f8;
+  --app-text: #1a1d29;
+  --app-muted: #6b7280;
+  --app-border: #e6e8f0;
+  --app-primary: #8b5cf6;
+  --app-accent: #ec4899;
+  --app-hover: #a855f7;
+  --app-hover-bg: rgba(139, 92, 246, 0.08);
+  --app-success: #22c55e;
+  --app-danger: #f43f5e;
+  --app-warning: #fbbf24;
+
+  --app-gradient: linear-gradient(135deg, #8b5cf6, #ec4899);
+
+  --app-panel: var(--app-sidebar);
+  --app-panel-hover: var(--app-hover-bg);
+
+  --chat-bg: #eff1f8;
+  --chat-input-bg: #ffffff;
+  --chat-input-text: #1a1d29;
+  --chat-input-placeholder: #6b7280;
+  --chat-accent: #8b5cf6;
+
+  --bubble-out: linear-gradient(135deg, #8b5cf6, #ec4899);
+  --bubble-out-text: #ffffff;
+  --bubble-in: #ffffff;
+  --bubble-in-text: #1a1d29;
+  --bubble-in-border: #e6e8f0;
+
+  --glass-bg: rgba(255, 255, 255, 0.88);
+  --glass-border: rgba(230, 232, 240, 0.9);
+
+  --modal-bg: var(--glass-bg);
+  --modal-text: var(--app-text);
+  --modal-muted: var(--app-muted);
+  --modal-border: var(--glass-border);
+
+  --form-bg: #ffffff;
+  --form-text: #1a1d29;
+  --form-placeholder: #6b7280;
+  --form-border: #e6e8f0;
+
+  --overlay-bg: rgba(26, 29, 41, 0.35);
+
+  --landing-overlay: rgba(248, 249, 253, 0.75);
+  --landing-blob-1: #c4b5fd;
+  --landing-blob-2: #f9a8d4;
+
+  --badge-lang-bg: linear-gradient(
+    135deg,
+    rgba(139, 92, 246, 0.15),
+    rgba(236, 72, 153, 0.12)
+  );
+  --badge-lang-border: rgba(139, 92, 246, 0.35);
+  --badge-lang-text: #6d28d9;
+
+  --status-processing: #8b5cf6;
+  --status-pending: #6b7280;
+  --status-done: #22c55e;
 }
 
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  --font-sans: var(--font-app), system-ui, sans-serif;
+}
+
+html {
+  color-scheme: dark;
+}
+
+html[data-theme='nebula-light'] {
+  color-scheme: light;
+}
+
+html.theme-animate,
+html.theme-animate *,
+html.theme-animate *::before,
+html.theme-animate *::after {
+  transition:
+    background-color 300ms ease,
+    color 300ms ease,
+    border-color 300ms ease,
+    box-shadow 300ms ease,
+    fill 300ms ease !important;
 }
 
 body {
   background: var(--background);
   color: var(--foreground);
-  font-family: var(--font-geist-sans), system-ui, sans-serif;
+  font-family: var(--font-app), 'SF Pro Display', system-ui, sans-serif;
+  font-weight: 400;
+  -webkit-font-smoothing: antialiased;
+  overflow-x: hidden;
+}
+
+/* ── Touch: iOS & Android ── */
+html {
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+  overflow-x: hidden;
+}
+
+.touch-root {
+  -webkit-overflow-scrolling: touch;
+  overflow-x: hidden;
+}
+
+a,
+button,
+input[type='button'],
+input[type='submit'],
+input[type='reset'],
+input[type='checkbox'],
+input[type='radio'],
+select,
+summary,
+[role='button'],
+[role='switch'],
+[role='link'],
+[role='tab'],
+label[for] {
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: rgba(139, 92, 246, 0.22);
+}
+
+button:not(:disabled),
+a[href],
+[role='button']:not([aria-disabled='true']),
+[role='switch'] {
+  cursor: pointer;
+}
+
+button,
+[role='button'] {
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+/* No usar pointer-events:none en hijos de botones: rompe touchend en Android WebView */
+
+.app-touchable {
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: rgba(139, 92, 246, 0.22);
+}
+
+.touch-target {
+  min-height: 44px;
+  min-width: 44px;
+}
+
+@media (hover: none) and (pointer: coarse) {
+  .app-hover:active:not(:disabled),
+  .app-touchable:active:not(:disabled),
+  a:active {
+    opacity: 0.92;
+  }
+
+  /* Evita zoom al enfocar inputs en iOS Safari */
+  input,
+  select,
+  textarea {
+    font-size: 16px;
+  }
 }
 
 @media (prefers-reduced-motion: no-preference) {
-  .profile-chip-bounce {
-    animation: profile-chip-bounce 1.35s ease-in-out infinite;
+  .app-hover {
+    transition:
+      background-color 200ms ease,
+      color 200ms ease,
+      opacity 200ms ease,
+      box-shadow 200ms ease;
   }
 }
 
-@keyframes profile-chip-bounce {
+@keyframes typing-bounce {
   0%,
+  60%,
   100% {
     transform: translateY(0);
+    opacity: 0.45;
   }
-  40% {
-    transform: translateY(-4px);
+  30% {
+    transform: translateY(-3px);
+    opacity: 1;
   }
-  65% {
+}
+
+.typing-dot {
+  animation: typing-bounce 1.2s infinite ease-in-out;
+}
+
+.typing-dot-delay-1 {
+  animation-delay: 0.15s;
+}
+
+.typing-dot-delay-2 {
+  animation-delay: 0.3s;
+}
+
+.chat-pane-bg {
+  background-color: var(--chat-bg);
+  box-shadow: inset 0 1px 0 var(--app-border);
+}
+
+.app-scrollbar {
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior: contain;
+}
+
+.app-scrollbar::-webkit-scrollbar {
+  width: 6px;
+}
+
+.app-scrollbar::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.app-scrollbar::-webkit-scrollbar-thumb {
+  background: var(--app-border);
+  border-radius: 999px;
+}
+
+.app-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: var(--app-hover);
+}
+
+.nebula-glass {
+  background: var(--glass-bg);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid var(--glass-border);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.08);
+}
+
+.modal-light {
+  background: var(--modal-bg);
+  color: var(--modal-text);
+  border: 1px solid var(--modal-border);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  box-shadow: 0 24px 48px rgba(0, 0, 0, 0.12);
+}
+
+.btn-gradient {
+  background: var(--app-gradient);
+  color: #fff;
+  box-shadow: 0 4px 24px rgba(139, 92, 246, 0.28);
+}
+
+.btn-gradient:hover:not(:disabled) {
+  filter: brightness(1.06);
+  box-shadow: 0 6px 28px rgba(236, 72, 153, 0.32);
+}
+
+.btn-gradient:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.glow-purple {
+  box-shadow: 0 0 60px rgba(139, 92, 246, 0.35);
+}
+
+@keyframes hero-gradient {
+  0%,
+  100% {
+    opacity: 0.5;
+  }
+  50% {
+    opacity: 0.85;
+  }
+}
+
+.hero-gradient-animate {
+  animation: hero-gradient 10s ease-in-out infinite;
+}
+
+@keyframes fade-in-up {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+  to {
+    opacity: 1;
     transform: translateY(0);
   }
+}
+
+.animate-fade-in-up {
+  animation: fade-in-up 0.45s ease-out forwards;
+}
+
+.message-fade-in {
+  animation: fade-in-up 0.22s ease-out;
+}
+
+.badge-lang {
+  background: var(--badge-lang-bg);
+  border: 1px solid var(--badge-lang-border);
+  color: var(--badge-lang-text);
+}
+
+.msg-bubble-out {
+  background: var(--bubble-out);
+  color: var(--bubble-out-text);
+  box-shadow: 0 2px 14px rgba(139, 92, 246, 0.28);
+}
+
+.msg-bubble-in {
+  background: var(--bubble-in);
+  color: var(--bubble-in-text);
+  border: 1px solid var(--bubble-in-border);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
+}
+
+.invite-code-display {
+  background: #f8f9fc;
+  color: #1a1d29;
+  border: 1px solid rgba(139, 92, 246, 0.25);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.8);
+}
+
+.modal-overlay {
+  background: var(--overlay-bg);
+  touch-action: manipulation;
+}
+
+.drawer-panel {
+  /* Sin transform: en Android desalinea hitbox respecto al dibujo */
+  animation: drawer-fade-in 180ms ease-out;
+}
+
+@keyframes drawer-fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+/* Capas z-index unificadas */
+.z-app-header {
+  z-index: 20;
+  isolation: isolate;
+}
+
+.z-drawer-backdrop {
+  z-index: 40;
+}
+
+.z-drawer-panel {
+  z-index: 50;
+}
+
+.z-modal {
+  z-index: 60;
+}
+
+.z-toast {
+  z-index: 70;
+}
+
+/* Decoración: nunca captura toques */
+.touch-decorative,
+.touch-decorative * {
+  pointer-events: none !important;
+}
+
+@media (hover: none) and (pointer: coarse) {
+  /* transform en animaciones de entrada desplaza hitboxes en móvil */
+  .animate-fade-in-up {
+    animation: none;
+    opacity: 1;
+    transform: none;
+  }
+
+  .message-fade-in {
+    animation: none;
+    opacity: 1;
+    transform: none;
+  }
+}
+
+.modal-panel-scroll {
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior: contain;
+}
+
+@media (hover: none) and (pointer: coarse) {
+  .modal-overlay {
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+  }
+}
+
+.landing-nebula-bg {
+  background-color: var(--app-bg);
+}
+
+.landing-nebula-blob {
+  position: absolute;
+  border-radius: 50%;
+  filter: blur(80px);
+  pointer-events: none;
+}
+
+.landing-nebula-blob-1 {
+  width: 55%;
+  height: 55%;
+  top: -10%;
+  left: -8%;
+  background: var(--landing-blob-1);
+  opacity: 0.7;
+}
+
+.landing-nebula-blob-2 {
+  width: 50%;
+  height: 50%;
+  bottom: -5%;
+  right: -10%;
+  background: var(--landing-blob-2);
+  opacity: 0.65;
+}
+
+.landing-nebula-blob-3 {
+  width: 35%;
+  height: 35%;
+  top: 40%;
+  left: 35%;
+  background: var(--landing-blob-1);
+  opacity: 0.35;
 }

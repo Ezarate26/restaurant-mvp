@@ -1,88 +1,29 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
-import type { Profile, ProfileRole } from './types';
+import type { AppUser } from './types';
 
-export async function fetchProfileByUserId(
+export async function fetchUserById(
   client: SupabaseClient,
   userId: string
-): Promise<Profile | null> {
+): Promise<AppUser | null> {
   const { data } = await client
-    .from('profiles')
+    .from('users')
     .select('*')
     .eq('id', userId)
     .maybeSingle();
 
-  return (data as Profile) ?? null;
+  return (data as AppUser) ?? null;
 }
 
-export async function fetchProfileRestaurantId(
-  client: SupabaseClient,
-  userId: string
-): Promise<string | null> {
-  const { data } = await client
-    .from('profiles')
-    .select('restaurant_id')
-    .eq('id', userId)
-    .maybeSingle();
-
-  return (data?.restaurant_id as string | null | undefined) ?? null;
-}
-
-export async function fetchProfilesByIds(
+export async function fetchUsersByIds(
   client: SupabaseClient,
   ids: string[]
-): Promise<Profile[]> {
+): Promise<AppUser[]> {
   if (ids.length === 0) return [];
-  const { data, error } = await client
-    .from('profiles')
-    .select('*')
-    .in('id', ids);
+  const { data, error } = await client.from('users').select('*').in('id', ids);
 
   if (error) {
-    console.error('fetchProfilesByIds', error);
+    console.error('fetchUsersByIds', error);
     return [];
   }
-  return (data as Profile[]) ?? [];
-}
-
-export async function countProfilesByRestaurant(
-  client: SupabaseClient,
-  restaurantId: string
-): Promise<number> {
-  const { count, error } = await client
-    .from('profiles')
-    .select('id', { count: 'exact', head: true })
-    .eq('restaurant_id', restaurantId);
-
-  if (error) {
-    console.error('countProfilesByRestaurant', error);
-    return 0;
-  }
-  return count ?? 0;
-}
-
-export async function insertWaiterProfile(
-  client: SupabaseClient,
-  row: {
-    id: string;
-    email: string;
-    full_name: string;
-    employee_number: string | null;
-    restaurant_id: string;
-    role: ProfileRole;
-    /** `profiles.language`; por defecto `es`. */
-    language?: string;
-  }
-) {
-  return client.from('profiles').insert([
-    {
-      id: row.id,
-      email: row.email,
-      full_name: row.full_name,
-      employee_number: row.employee_number,
-      restaurant_id: row.restaurant_id,
-      role: row.role,
-      is_active: true,
-      language: row.language ?? 'es',
-    },
-  ]);
+  return (data as AppUser[]) ?? [];
 }

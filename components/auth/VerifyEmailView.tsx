@@ -1,65 +1,60 @@
 'use client';
 
-import { useRouter } from 'next/navigation';
+import Link from 'next/link';
 import { useVerifyEmailViewModel } from '@/lib/viewmodels/useVerifyEmailViewModel';
+import { TapButton } from '@/components/ui/TapButton';
+import {
+  uiBtnGhost,
+  uiBtnPrimary,
+  uiBtnSecondary,
+  uiCard,
+  uiError,
+} from '@/components/ui/ui-classes';
 
 export function VerifyEmailView() {
-  const router = useRouter();
   const vm = useVerifyEmailViewModel();
 
   return (
-    <div className="min-h-screen bg-[#F4F6F8] px-4 py-10 sm:px-6 sm:py-14">
-      <div className="mx-auto w-full max-w-md">
-        <div className="rounded-2xl border border-[#E5E7EB] bg-white p-8 text-center shadow-sm sm:p-10">
-          <h1 className="text-2xl font-semibold text-[#1F2937]">
-            Verifica tu correo
-          </h1>
+    <div className="flex min-h-screen flex-col items-center justify-center overflow-x-hidden bg-[var(--app-bg)] px-3 py-10 sm:px-4">
+      <div className={`${uiCard} w-full min-w-0 max-w-md text-center`}>
+        <h1 className="text-2xl font-bold text-[var(--app-text)]">
+          Verifica tu correo
+        </h1>
 
-          <p className="mt-4 text-sm leading-relaxed text-[#6B7280]">
-            Verifica tu correo para continuar. Te enviamos un enlace si hace falta
-            confirmación.
+        <p className="mt-4 text-sm leading-relaxed text-[var(--app-muted)]">
+          Verifica tu correo para continuar. Te enviamos un enlace si hace falta
+          confirmación.
+        </p>
+
+        {vm.error ? <p className={`${uiError} mt-4`}>{vm.error}</p> : null}
+
+        {vm.provisionError ? (
+          <p className="mt-4 rounded-md border border-[var(--app-warning)]/40 bg-[var(--app-warning)]/10 px-3 py-2 text-xs text-[var(--app-warning)]">
+            {vm.provisionError}
           </p>
+        ) : null}
 
-          {vm.error && (
-            <p className="mt-4 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs font-medium text-red-700">
-              {vm.error}
-            </p>
-          )}
+        <TapButton
+          onTap={() => void vm.onVerifiedClick()}
+          disabled={vm.loading}
+          className={`${uiBtnPrimary} mt-8`}
+        >
+          {vm.loading ? 'Comprobando…' : 'Correo verificado'}
+        </TapButton>
 
-          {vm.provisionError && (
-            <p className="mt-4 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-medium text-amber-900">
-              {vm.provisionError}
-            </p>
-          )}
-
-          <button
-            type="button"
-            onClick={() => void vm.onVerifiedClick()}
+        {vm.provisionError ? (
+          <TapButton
+            onTap={() => void vm.retryProvisioning()}
             disabled={vm.loading}
-            className="mt-8 w-full rounded-xl bg-[#229ED9] py-3 text-sm font-semibold text-white shadow-sm transition hover:brightness-95 active:brightness-90 disabled:cursor-not-allowed disabled:opacity-50"
+            className={`${uiBtnSecondary} mt-3`}
           >
-            {vm.loading ? 'Comprobando…' : 'Correo verificado'}
-          </button>
+            Reintentar
+          </TapButton>
+        ) : null}
 
-          {vm.provisionError && (
-            <button
-              type="button"
-              onClick={() => void vm.retryProvisioning()}
-              disabled={vm.loading}
-              className="mt-3 w-full rounded-xl border border-[#E5E7EB] bg-white py-3 text-sm font-semibold text-[#1F2937] shadow-sm transition hover:bg-[#F4F6F8] disabled:cursor-not-allowed disabled:opacity-50"
-            >
-              Reintentar
-            </button>
-          )}
-
-          <button
-            type="button"
-            onClick={() => router.push('/login')}
-            className="mt-4 w-full rounded-xl py-2.5 text-sm font-medium text-[#6B7280] transition hover:text-[#1F2937]"
-          >
-            Ir al inicio de sesión
-          </button>
-        </div>
+        <Link href="/login" className={`${uiBtnGhost} mt-4 block w-full text-center`}>
+          Ir al inicio de sesión
+        </Link>
       </div>
     </div>
   );

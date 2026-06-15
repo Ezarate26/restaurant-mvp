@@ -1,10 +1,10 @@
 /**
- * Identificador estable del dispositivo del cliente para mapear a session_users.user_identifier.
- * No usa Supabase Auth; vive solo en localStorage. Si no existe localStorage (SSR),
- * devuelve un id efímero que NO se persiste.
+ * Identificador estable del dispositivo del participante (localStorage).
+ * No usa Supabase Auth.
  */
 
-const STORAGE_KEY = 'restaurantMvp.customerIdentifier';
+const STORAGE_KEY = 'conversationPlatform.deviceId';
+const LEGACY_STORAGE_KEY = 'restaurantMvp.customerIdentifier';
 
 function generateUuid(): string {
   if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
@@ -20,8 +20,15 @@ function generateUuid(): string {
 export function getOrCreateCustomerIdentifier(): string {
   if (typeof window === 'undefined') return generateUuid();
   try {
-    const existing = window.localStorage.getItem(STORAGE_KEY);
-    if (existing && existing.length > 0) return existing;
+    const existing =
+      window.localStorage.getItem(STORAGE_KEY) ??
+      window.localStorage.getItem(LEGACY_STORAGE_KEY);
+    if (existing && existing.length > 0) {
+      if (!window.localStorage.getItem(STORAGE_KEY)) {
+        window.localStorage.setItem(STORAGE_KEY, existing);
+      }
+      return existing;
+    }
     const fresh = generateUuid();
     window.localStorage.setItem(STORAGE_KEY, fresh);
     return fresh;
@@ -29,3 +36,6 @@ export function getOrCreateCustomerIdentifier(): string {
     return generateUuid();
   }
 }
+
+/** Alias de dominio para participantes anónimos. */
+export const getOrCreateDeviceId = getOrCreateCustomerIdentifier;

@@ -1,5 +1,5 @@
 /**
- * Catálogo UI para selects de idioma (perfil, registro, restaurante).
+ * Catálogo UI para selects de idioma (perfil, registro, conversaciones).
  * Códigos en minúsculas tipo ISO 639-1 donde aplica.
  */
 export const LANGUAGES: { code: string; name: string }[] = [
@@ -78,4 +78,21 @@ export function normalizeLanguageCode(code: string | null | undefined): string {
 export function languageDisplayName(code: string | null | undefined): string {
   const c = normalizeLanguageCode(code);
   return LANGUAGES.find((l) => l.code === c)?.name ?? c.toUpperCase();
+}
+
+/** Nombre del idioma en el locale del usuario (p. ej. «Anglais» si el viewer es fr). */
+export function languageDisplayNameInLocale(
+  code: string | null | undefined,
+  viewerLocale: string | null | undefined
+): string {
+  const langCode = normalizeLanguageCode(code);
+  const locale = normalizeLanguageCode(viewerLocale ?? 'es');
+  try {
+    const display = new Intl.DisplayNames([locale], { type: 'language' });
+    const label = display.of(langCode);
+    if (label) return label.charAt(0).toUpperCase() + label.slice(1);
+  } catch {
+    /* Intl no disponible o locale inválido */
+  }
+  return languageDisplayName(langCode);
 }
