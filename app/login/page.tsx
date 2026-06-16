@@ -24,14 +24,6 @@ export default function AuthPage() {
       }
       fullName={vm.fullName}
       onFullNameChange={vm.setFullName}
-      employeeNumber={vm.employeeNumber}
-      onEmployeeNumberChange={vm.setEmployeeNumber}
-      waiterPhone={vm.waiterPhone}
-      onWaiterPhoneChange={vm.setWaiterPhone}
-      restaurantCode={vm.restaurantCode}
-      onRestaurantCodeChange={vm.setRestaurantCode}
-      waiterLanguage={vm.waiterLanguage}
-      onWaiterLanguageChange={vm.setWaiterLanguage}
       formError={vm.formError}
       registerPasswordMismatch={vm.registerPasswordMismatch}
       onSubmit={vm.handleAuth}

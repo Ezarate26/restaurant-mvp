@@ -32,7 +32,7 @@ export function useVerifyEmailViewModel() {
         setProvisionError(result.message);
         return false;
       }
-      router.replace(result.dashboard === 'owner' ? '/owner' : '/waiter');
+      router.replace('/');
       return true;
     },
     [router]

@@ -1,13 +1,13 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { normalizeLanguageCode } from '@/constants/languages';
-import { translateMessage } from '@/features/translation/translation.service';
-import { fetchActiveSessionLanguages } from '@/lib/model/session-languages.repository';
+import { fetchActiveConversationLanguages } from '@/lib/model/conversation-languages.repository';
+import { translateWithCache } from '@/lib/model/translation-cache.repository';
 import type { Message, MessageTranslation } from './types';
 
 type TranslationInsertRow = {
   message_id: string;
-  language: string;
-  translated_text: string;
+  language_code: string;
+  translated_content: string;
 };
 
 export async function insertMessageTranslations(
@@ -22,10 +22,6 @@ export async function insertMessageTranslations(
   }
 }
 
-/**
- * Inserta o completa traducciones faltantes sin duplicar.
- * Requiere UNIQUE en DB: (message_id, language).
- */
 export async function upsertMessageTranslations(
   client: SupabaseClient,
   rows: TranslationInsertRow[]
@@ -33,7 +29,10 @@ export async function upsertMessageTranslations(
   if (rows.length === 0) return;
   const { error } = await client
     .from('message_translations')
-    .upsert(rows, { onConflict: 'message_id,language', ignoreDuplicates: true });
+    .upsert(rows, {
+      onConflict: 'message_id,language_code',
+      ignoreDuplicates: true,
+    });
   if (error) {
     console.error('upsertMessageTranslations', error);
     throw error;
@@ -46,25 +45,21 @@ export function normalizeMessageTranslationRow(
   return raw as unknown as MessageTranslation;
 }
 
-/**
- * Tras insertar un mensaje: traduce solo a idiomas activos en `session_users`
- * (`is_active`) distintos del idioma original. Idempotente por fila en BD.
- */
 export async function ensureTranslationsForNewMessage(
   client: SupabaseClient,
-  sessionId: string,
-  message: Pick<Message, 'id' | 'text' | 'original_language' | 'sender'>
+  conversationId: string,
+  message: Pick<Message, 'id' | 'content' | 'original_language' | 'message_type'>
 ): Promise<void> {
-  const sid = sessionId.trim();
-  if (!sid || !message.id) return;
-  if (message.sender === 'system') return;
+  const cid = conversationId.trim();
+  if (!cid || !message.id) return;
+  if (message.message_type !== 'text' && message.message_type !== 'audio') return;
 
-  const body = (message.text ?? '').trim();
+  const body = (message.content ?? '').trim();
   const olRaw = message.original_language?.trim();
   if (!body || !olRaw) return;
 
   const orig = normalizeLanguageCode(olRaw);
-  const activeLangs = await fetchActiveSessionLanguages(client, sid);
+  const activeLangs = await fetchActiveConversationLanguages(client, cid);
   const targets = [
     ...new Set(
       activeLangs
@@ -76,7 +71,7 @@ export async function ensureTranslationsForNewMessage(
 
   const { data: existingRows, error: exErr } = await client
     .from('message_translations')
-    .select('language')
+    .select('language_code')
     .eq('message_id', message.id);
 
   if (exErr) {
@@ -86,7 +81,7 @@ export async function ensureTranslationsForNewMessage(
 
   const have = new Set(
     (existingRows ?? []).map((r) =>
-      normalizeLanguageCode(r.language as string | null | undefined)
+      normalizeLanguageCode(r.language_code as string | null | undefined)
     )
   );
 
@@ -96,57 +91,54 @@ export async function ensureTranslationsForNewMessage(
   const rows: TranslationInsertRow[] = await Promise.all(
     pendingLangs.map(async (lang) => ({
       message_id: message.id,
-      language: lang,
-      translated_text: await translateMessage(client, body, orig, lang),
+      language_code: lang,
+      translated_content: await translateWithCache(client, body, orig, lang),
     }))
   );
 
   await upsertMessageTranslations(client, rows);
+
+  await client
+    .from('messages')
+    .update({ translation_status: 'completed' })
+    .eq('id', message.id);
 }
 
-/**
- * Para el historial: completa solo la columna del idioma del usuario actual
- * cuando falta fila en `message_translations`. No recorre otros idiomas ni reescribe mensajes.
- */
 export async function ensureViewerMissingTranslations(
   client: SupabaseClient,
-  sessionId: string,
+  conversationId: string,
   viewerLanguage: string | null | undefined
 ): Promise<void> {
-  const sid = sessionId.trim();
+  const cid = conversationId.trim();
   const raw = (viewerLanguage ?? '').trim();
-  if (!sid || !raw) return;
+  if (!cid || !raw) return;
 
   const viewerLang = normalizeLanguageCode(raw);
 
   const { data: messageRows, error: msgErr } = await client
     .from('messages')
-    .select('id, text, original_language, sender')
-    .eq('session_id', sid);
+    .select('id, content, original_language, message_type')
+    .eq('conversation_id', cid)
+    .is('deleted_at', null);
 
   if (msgErr) {
     console.error('ensureViewerMissingTranslations:messages', msgErr);
     throw msgErr;
   }
 
-  const rows = messageRows ?? [];
-  const candidates = rows.filter((r) => {
-    const sender = r.sender as string | null | undefined;
-    if (sender !== 'customer' && sender !== 'waiter') return false;
-    const t = (r.text as string | null | undefined)?.trim();
+  const candidates = (messageRows ?? []).filter((r) => {
+    if (r.message_type !== 'text' && r.message_type !== 'audio') return false;
+    const t = (r.content as string | null | undefined)?.trim();
     const ol = (r.original_language as string | null | undefined)?.trim();
     return Boolean(t && ol);
   });
 
   const ids: string[] = [];
-  const meta = new Map<
-    string,
-    { body: string; orig: string }
-  >();
+  const meta = new Map<string, { body: string; orig: string }>();
 
   for (const r of candidates) {
     const mid = r.id as string;
-    const body = (r.text as string).trim();
+    const body = (r.content as string).trim();
     const orig = normalizeLanguageCode(r.original_language as string);
     if (orig === viewerLang) continue;
     ids.push(mid);
@@ -158,7 +150,7 @@ export async function ensureViewerMissingTranslations(
   const { data: existingTr, error: trErr } = await client
     .from('message_translations')
     .select('message_id')
-    .eq('language', viewerLang)
+    .eq('language_code', viewerLang)
     .in('message_id', ids);
 
   if (trErr) {
@@ -178,8 +170,8 @@ export async function ensureViewerMissingTranslations(
       const m = meta.get(message_id)!;
       return {
         message_id,
-        language: viewerLang,
-        translated_text: await translateMessage(
+        language_code: viewerLang,
+        translated_content: await translateWithCache(
           client,
           m.body,
           m.orig,

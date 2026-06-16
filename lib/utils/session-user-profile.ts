@@ -1,85 +1,35 @@
-import type { SessionUser } from '@/lib/model/types';
+import type { ConversationMember } from '@/lib/model/types';
 
 export type CompleteProfileLinkOpts = {
-  servicePointId?: string | null;
-  sessionId?: string | null;
+  conversationId?: string | null;
 };
 
-/**
- * Cliente con cuenta en `customers` vinculada (login, reconocimiento por correo o registro terminado).
- * En el chat no deben mostrarse CTAs de registro.
- */
-export function isChatRegisteredCustomer(
-  sessionUser: SessionUser | null | undefined
+export function isRegisteredMember(
+  member: ConversationMember | null | undefined
 ): boolean {
-  return Boolean(sessionUser?.customer_id?.trim());
+  return Boolean(member?.user_id?.trim());
 }
 
-/**
- * Textos del header/banner según flujo: invitación por correo vs correo nuevo sin cuenta.
- */
-export function chatProfileRegistrationCopy(
-  sessionUser: SessionUser | null | undefined
-): {
-  chipLabel: string;
-  linkShort: string;
-  linkBanner: string;
-} {
-  const invited = sessionUser?.registration_invited === true;
-  return {
-    chipLabel: 'Completar tu registro',
-    linkShort: invited ? 'Completar usuario' : 'Completar registro',
-    linkBanner: invited
-      ? 'Completar usuario — nombre, teléfono y contraseña'
-      : 'Completar registro — nombre, teléfono y contraseña',
-  };
-}
-
-/**
- * Enlace "Completar registro" solo si falta completar y hay correo en la sesión.
- * Incluye `return_point` / `return_session` para volver al mismo chat con la conversación.
- */
-export function completeProfileHrefForSessionUser(
-  sessionUser: SessionUser | null | undefined,
-  /** Si el servidor aún no devolvió email en la fila pero el usuario lo escribió en el borrador. */
+export function completeProfileHrefForMember(
+  member: ConversationMember | null | undefined,
   fallbackEmail?: string | null,
   opts?: CompleteProfileLinkOpts | null
 ): string | null {
-  if (!sessionUser) return null;
-  if (isChatRegisteredCustomer(sessionUser)) return null;
-  if (sessionUser.is_profile_completed === true) return null;
-  const email =
-    sessionUser.email?.trim() ||
-    (fallbackEmail?.trim() ? fallbackEmail.trim() : '');
-  if (!email) return null;
+  if (!member) return null;
+  if (isRegisteredMember(member)) return null;
+  const email = member.display_name?.trim() || fallbackEmail?.trim() || '';
+  if (!email.includes('@')) return null;
   const q = new URLSearchParams();
   q.set('email', email);
-  const pid = opts?.servicePointId?.trim();
-  const sid = opts?.sessionId?.trim();
-  if (pid) q.set('return_point', pid);
-  if (sid) q.set('return_session', sid);
+  const cid = opts?.conversationId?.trim();
+  if (cid) q.set('return_conversation', cid);
   return `/complete-profile?${q.toString()}`;
 }
 
-/**
- * Muestra chip "Agrega tu nombre" + modal opcional en el chat.
- * Si ya enviamos invitación por correo (`registration_invited`), no mostrar ese chip:
- * el cliente usa solo "Completar registro".
- */
 export function shouldPromptOptionalProfile(
-  sessionUser: SessionUser | null | undefined
+  member: ConversationMember | null | undefined
 ): boolean {
-  if (!sessionUser) return false;
-  if (isChatRegisteredCustomer(sessionUser)) return false;
-  if (sessionUser.registration_invited === true) return false;
-
-  const hasIdentity =
-    Boolean(sessionUser.display_name?.trim()) ||
-    Boolean(sessionUser.username?.trim()) ||
-    Boolean(sessionUser.email?.trim());
-
-  const markedDone = sessionUser.is_profile_completed === true;
-
-  if (markedDone && hasIdentity) return false;
-  return true;
+  if (!member) return false;
+  if (isRegisteredMember(member)) return false;
+  return !member.display_name?.trim();
 }

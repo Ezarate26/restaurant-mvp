@@ -6,19 +6,17 @@ import {
   insertMessageAndRunTranslationPipeline,
   hydrateChatMessagesForViewer,
   type ChatOutboundInsertRow,
+  type ConversationLanguagesRef,
   type OutboundPipelineResult,
-  type SessionLanguagesRef,
 } from '@/lib/messaging/outbound-message-pipeline';
+import { insertVoiceMessageAndProcess } from '@/lib/messaging/voice-message-pipeline';
 import type { Message } from '@/lib/model/types';
 
-/**
- * Envío de mensajes chat (customer / waiter): insert + traducciones solo para ese mensaje.
- */
 export function useMessageSender() {
   const handleSendMessage = useCallback(
     async (args: {
       insertRow: ChatOutboundInsertRow;
-      latestLanguagesRef?: SessionLanguagesRef;
+      latestLanguagesRef?: ConversationLanguagesRef;
     }): Promise<OutboundPipelineResult> => {
       return insertMessageAndRunTranslationPipeline(supabase, args.insertRow, {
         latestLanguagesRef: args.latestLanguagesRef,
@@ -27,15 +25,29 @@ export function useMessageSender() {
     []
   );
 
+  const handleSendVoiceMessage = useCallback(
+    async (args: {
+      conversation_id: string;
+      member_id: string;
+      blob: Blob;
+      mimeType?: string;
+      original_language?: string | null;
+      duration_seconds?: number | null;
+    }): Promise<{ message: Message; messages: Message[] }> => {
+      return insertVoiceMessageAndProcess(supabase, args);
+    },
+    []
+  );
+
   const hydrateViewerMessages = useCallback(
     async (args: {
-      sessionId: string;
+      conversationId: string;
       viewerLanguage: string | null | undefined;
-      latestLanguagesRef?: SessionLanguagesRef;
-    }): Promise<{ messages: Message[]; sessionLanguages: string[] }> => {
+      latestLanguagesRef?: ConversationLanguagesRef;
+    }): Promise<{ messages: Message[]; conversationLanguages: string[] }> => {
       return hydrateChatMessagesForViewer(
         supabase,
-        args.sessionId,
+        args.conversationId,
         args.viewerLanguage,
         { latestLanguagesRef: args.latestLanguagesRef }
       );
@@ -43,5 +55,5 @@ export function useMessageSender() {
     []
   );
 
-  return { handleSendMessage, hydrateViewerMessages };
+  return { handleSendMessage, handleSendVoiceMessage, hydrateViewerMessages };
 }
