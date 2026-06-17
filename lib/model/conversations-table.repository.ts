@@ -62,6 +62,60 @@ export async function fetchConversationById(
   return (data as Conversation) ?? null;
 }
 
+export async function addConversationSessionExtraMs(
+  client: SupabaseClient,
+  conversationId: string,
+  extraMs: number
+): Promise<Conversation | null> {
+  const current = await fetchConversationById(client, conversationId);
+  if (!current) return null;
+
+  const nextExtra =
+    (typeof current.session_extra_ms === 'number' ? current.session_extra_ms : 0) +
+    extraMs;
+
+  const { data, error } = await client
+    .from('conversations')
+    .update({ session_extra_ms: nextExtra })
+    .eq('id', conversationId)
+    .select('*')
+    .single();
+
+  if (error || !data) {
+    console.error('addConversationSessionExtraMs', error);
+    throw formatSupabaseError(error, 'No se pudo extender la sesión');
+  }
+  return data as Conversation;
+}
+
+export async function grantConversationFreeSessionBonus(
+  client: SupabaseClient,
+  conversationId: string
+): Promise<Conversation | null> {
+  const current = await fetchConversationById(client, conversationId);
+  if (!current || current.session_free_bonus_used) return null;
+
+  const nextExtra =
+    (typeof current.session_extra_ms === 'number' ? current.session_extra_ms : 0) +
+    10 * 60_000;
+
+  const { data, error } = await client
+    .from('conversations')
+    .update({
+      session_extra_ms: nextExtra,
+      session_free_bonus_used: true,
+    })
+    .eq('id', conversationId)
+    .select('*')
+    .single();
+
+  if (error || !data) {
+    console.error('grantConversationFreeSessionBonus', error);
+    throw formatSupabaseError(error, 'No se pudo otorgar tiempo extra');
+  }
+  return data as Conversation;
+}
+
 export async function fetchConversationByInviteCode(
   client: SupabaseClient,
   inviteCode: string

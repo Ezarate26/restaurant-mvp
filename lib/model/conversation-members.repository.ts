@@ -201,6 +201,7 @@ export async function bootstrapConversationWithOwner(
     deviceId: string;
     displayName?: string | null;
     preferredLanguage: string;
+    userId?: string | null;
   }
 ): Promise<{
   conversationId: string;
@@ -218,6 +219,7 @@ export async function bootstrapConversationWithOwner(
     displayName: args.displayName,
     preferredLanguage: args.preferredLanguage,
     role: 'owner',
+    userId: args.userId,
   });
 
   await setConversationOwner(client, conversation.id, member.id);
@@ -238,6 +240,7 @@ export async function joinConversationAsMember(
     deviceId: string;
     displayName?: string | null;
     preferredLanguage: string;
+    userId?: string | null;
   }
 ): Promise<ConversationMember> {
   const conversation = await fetchConversationById(client, args.conversationId);
@@ -258,5 +261,6 @@ export async function joinConversationAsMember(
     displayName: args.displayName,
     preferredLanguage: args.preferredLanguage,
     role: 'member',
+    userId: args.userId,
   });
 }

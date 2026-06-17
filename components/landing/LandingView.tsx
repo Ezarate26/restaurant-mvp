@@ -2,37 +2,50 @@
 
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
+import { SessionEndedNotice } from '@/components/conversation/SessionEndedNotice';
+import { ConversaBrand } from '@/components/brand/ConversaBrand';
+import { ConversaIcon } from '@/components/brand/ConversaIcon';
+import { PricingTable } from '@/components/billing/PricingTable';
 import { JoinByCodeModal } from '@/components/conversation/JoinByCodeModal';
+import { LandingLanguageToggle } from '@/components/landing/LandingLanguageToggle';
 import { ThemeToggle } from '@/components/ui/ThemeToggle';
 import { FormSubmitLabel } from '@/components/ui/FormSubmitLabel';
 import { uiBtnPrimary, uiInput } from '@/components/ui/ui-classes';
+import { AUTH_HOME_PATH } from '@/lib/constants/routes';
+import { useLandingLanguage } from '@/lib/hooks/useLandingLanguage';
+import { useAppLanguage } from '@/lib/i18n/AppLanguageProvider';
+import { useSupabaseAuth } from '@/lib/hooks/useSupabaseAuth';
+import { usePlan } from '@/lib/billing/PlanProvider';
+import type { PlanDefinition } from '@/lib/billing/types';
 
-const DEMO_STEPS = [
-  {
-    flag: '🇺🇸',
-    name: 'Usuario 1',
-    lang: 'EN',
-    text: 'Hello, how are you?',
-  },
-  {
-    flag: '🇲🇽',
-    name: 'Usuario 2',
-    lang: 'ES',
-    text: 'Hola, ¿cómo estás?',
-  },
-  {
-    flag: '🇫🇷',
-    name: 'Usuario 3',
-    lang: 'FR',
-    text: 'Bonjour, comment ça va ?',
-  },
-] as const;
+const DEMO_FLAGS = ['🇺🇸', '🇲🇽', '🇫🇷'] as const;
+const DEMO_LANGS = ['EN', 'ES', 'FR'] as const;
 
 export function LandingView() {
   const router = useRouter();
+  const plan = usePlan();
+  const { isAuthenticated, isLoading: authLoading } = useSupabaseAuth();
+  const { lang, setLang, t } = useLandingLanguage();
+  const { t: appT } = useAppLanguage();
   const [inviteCode, setInviteCode] = useState('');
   const [joinOpen, setJoinOpen] = useState(false);
+
+  useEffect(() => {
+    if (authLoading) return;
+    if (isAuthenticated) {
+      router.replace(AUTH_HOME_PATH);
+    }
+  }, [isAuthenticated, authLoading, router]);
+
+  if (authLoading || isAuthenticated) {
+    return (
+      <div className="flex min-h-screen flex-col items-center justify-center gap-3 bg-[var(--app-bg)] text-sm text-[var(--app-muted)]">
+        <ConversaIcon size={48} className="rounded-2xl" />
+        {appT.common.loading}
+      </div>
+    );
+  }
 
   const handleJoin = () => {
     const code = inviteCode.trim().toUpperCase();
@@ -43,8 +56,35 @@ export function LandingView() {
     router.push(`/join/${encodeURIComponent(code)}`);
   };
 
+  const handleJoinNavClick = () => {
+    if (window.location.hash === '#join-panel') {
+      setJoinOpen(true);
+      return;
+    }
+    document.getElementById('join-panel')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    window.history.replaceState(null, '', '#join-panel');
+  };
+
+  const handlePricingSelect = async (planId: PlanDefinition['id']) => {
+    if (planId === 'free') {
+      router.push('/create');
+      return;
+    }
+    if (!plan.isAuthenticated) {
+      router.push('/auth/register?redirect=/app/billing');
+      return;
+    }
+    if (planId === 'pro') {
+      await plan.upgradeToPro('/app/billing');
+      return;
+    }
+    router.push('/app/billing');
+  };
+
   return (
     <div className="min-h-screen overflow-x-hidden bg-[var(--app-bg)] text-[var(--app-text)]">
+      <SessionEndedNotice />
+
       <section className="landing-nebula-bg relative min-h-[92vh] overflow-hidden">
         <div className="touch-decorative absolute inset-0 overflow-hidden">
           <div className="landing-nebula-blob landing-nebula-blob-1" />
@@ -71,31 +111,37 @@ export function LandingView() {
           />
         </div>
 
-        <header className="relative z-10 mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-3 px-4 py-5 sm:px-6 sm:py-6">
-          <div className="flex min-w-0 items-center gap-3">
-            <span className="btn-gradient glow-purple grid h-11 w-11 place-items-center rounded-2xl text-lg font-bold">
-              C
-            </span>
-            <div>
-              <p className="text-base font-semibold tracking-tight">Conversa</p>
-              <p className="text-[11px] text-[var(--app-muted)]">
-                IA · Traducción en tiempo real
-              </p>
+        <header className="relative z-10 mx-auto max-w-6xl px-4 py-4 sm:px-6 sm:py-6">
+          <div className="flex items-start justify-between gap-3">
+            <LandingLanguageToggle lang={lang} onChange={setLang} embedded />
+            <div className="flex min-w-0 flex-1 items-center gap-2.5 pl-1">
+              <ConversaBrand
+                size={40}
+                subtitle={t.tagline}
+                iconClassName="rounded-2xl glow-purple shrink-0"
+                className="min-w-0 flex-1"
+              />
+            </div>
+            <div className="hidden shrink-0 sm:block">
+              <ThemeToggle compact />
             </div>
           </div>
-          <div className="flex w-full flex-wrap items-center justify-end gap-2 sm:w-auto sm:gap-3">
-            <ThemeToggle compact />
+
+          <div className="mt-3 flex items-center gap-2 sm:mt-4 sm:justify-end">
+            <div className="shrink-0 sm:hidden">
+              <ThemeToggle compact />
+            </div>
             <Link
               href="/login"
-              className="app-hover touch-target inline-flex min-h-[44px] items-center rounded-xl px-3 py-2 text-sm font-medium text-[var(--app-text)] ring-1 ring-[var(--app-border)] hover:bg-[var(--app-hover-bg)] sm:px-4"
+              className="app-hover touch-target inline-flex min-h-[44px] flex-1 items-center justify-center rounded-xl px-3 py-2 text-sm font-medium text-[var(--app-text)] ring-1 ring-[var(--app-border)] hover:bg-[var(--app-hover-bg)] sm:flex-none sm:px-4"
             >
-              Iniciar sesión
+              {t.login}
             </Link>
             <Link
               href="/register"
-              className="app-hover touch-target inline-flex min-h-[44px] items-center rounded-xl bg-[var(--app-card)] px-3 py-2 text-sm font-medium ring-1 ring-[var(--app-border)] hover:bg-[var(--app-hover-bg)] sm:px-4"
+              className="app-hover touch-target inline-flex min-h-[44px] flex-1 items-center justify-center rounded-xl bg-[var(--app-card)] px-3 py-2 text-sm font-medium ring-1 ring-[var(--app-border)] hover:bg-[var(--app-hover-bg)] sm:flex-none sm:px-4"
             >
-              Registrarse
+              {t.register}
             </Link>
           </div>
         </header>
@@ -105,55 +151,51 @@ export function LandingView() {
             className="animate-fade-in-up rounded-full px-3 py-1 text-xs font-semibold uppercase tracking-widest text-[var(--app-primary)] ring-1 ring-[var(--app-primary)]/30"
             style={{ background: 'var(--app-hover-bg)' }}
           >
-            Comunicación global con IA
+            {t.badge}
           </p>
           <h1 className="animate-fade-in-up mt-6 max-w-4xl text-3xl font-bold leading-[1.1] tracking-tight sm:text-5xl lg:text-6xl">
-            Habla con cualquier persona en cualquier idioma.
+            {t.heroTitle}
           </h1>
           <p className="animate-fade-in-up mt-5 max-w-xl text-base leading-relaxed text-[var(--app-muted)] sm:text-lg">
-            Mensajes y voz traducidos por IA en tiempo real.
+            {t.heroSubtitle}
           </p>
           <div className="animate-fade-in-up mt-8 flex w-full flex-col gap-3 sm:mt-10 sm:flex-row sm:flex-wrap">
             <Link
               href="/create"
               className="app-hover touch-target btn-gradient inline-flex min-h-[44px] items-center justify-center rounded-xl px-6 py-3.5 text-center text-sm font-semibold glow-purple sm:px-8"
             >
-              Crear conversación
+              {t.createConversation}
             </Link>
-            <Link
-              href="#join-panel"
+            <button
+              type="button"
+              onClick={handleJoinNavClick}
               className="app-hover touch-target inline-flex min-h-[44px] items-center justify-center rounded-xl bg-[var(--app-card)] px-6 py-3.5 text-sm font-semibold ring-1 ring-[var(--app-border)] hover:bg-[var(--app-hover-bg)] sm:px-8"
             >
-              Unirse a conversación
-            </Link>
+              {t.joinConversation}
+            </button>
           </div>
         </div>
       </section>
 
       <section className="border-t border-[var(--app-border)] bg-[var(--app-bg)] px-4 py-16 sm:px-6 sm:py-20">
         <div className="mx-auto max-w-3xl text-center">
-          <h2 className="text-xl font-bold tracking-tight sm:text-3xl">
-            Traducción instantánea, en vivo
-          </h2>
-          <p className="mx-auto mt-3 max-w-lg text-[var(--app-muted)]">
-            Cada participante lee y escucha en su idioma. La IA traduce texto y
-            voz al momento.
-          </p>
+          <h2 className="text-xl font-bold tracking-tight sm:text-3xl">{t.liveTitle}</h2>
+          <p className="mx-auto mt-3 max-w-lg text-[var(--app-muted)]">{t.liveSubtitle}</p>
         </div>
 
         <div className="mx-auto mt-12 max-w-md space-y-0">
-          {DEMO_STEPS.map((step, i) => (
-            <div key={step.lang}>
-              <div className="app-hover rounded-2xl border border-[var(--app-border)] bg-[var(--app-card)] p-4 sm:p-5 transition duration-200 hover:shadow-lg">
+          {t.demoUsers.map((step, i) => (
+            <div key={DEMO_LANGS[i]}>
+              <div className="app-hover rounded-2xl border border-[var(--app-border)] bg-[var(--app-card)] p-4 transition duration-200 hover:shadow-lg sm:p-5">
                 <div className="flex items-center gap-3">
                   <span className="text-2xl" aria-hidden>
-                    {step.flag}
+                    {DEMO_FLAGS[i]}
                   </span>
                   <div className="min-w-0 flex-1 text-left">
                     <div className="flex items-center gap-2">
                       <span className="text-sm font-semibold">{step.name}</span>
                       <span className="badge-lang rounded-md px-1.5 py-0.5 text-[10px] font-bold">
-                        {step.lang}
+                        {DEMO_LANGS[i]}
                       </span>
                     </div>
                     <p className="mt-1.5 text-[15px] leading-relaxed text-[var(--app-text)]">
@@ -162,7 +204,7 @@ export function LandingView() {
                   </div>
                 </div>
               </div>
-              {i < DEMO_STEPS.length - 1 ? (
+              {i < t.demoUsers.length - 1 ? (
                 <div
                   className="flex justify-center py-3 text-[var(--app-primary)]"
                   aria-hidden
@@ -180,19 +222,10 @@ export function LandingView() {
       <section className="border-t border-[var(--app-border)] bg-[var(--app-card)] px-4 py-14 sm:px-6 sm:py-16">
         <div className="mx-auto grid max-w-6xl gap-10 lg:grid-cols-2 lg:items-center">
           <div>
-            <h2 className="text-xl font-bold tracking-tight sm:text-2xl">
-              Diseñado para conversaciones reales
-            </h2>
-            <p className="mt-3 text-[var(--app-muted)]">
-              Voz original y traducida, indicadores de actividad en tiempo real,
-              participantes conectados y códigos QR para invitar al instante.
-            </p>
+            <h2 className="text-xl font-bold tracking-tight sm:text-2xl">{t.featuresTitle}</h2>
+            <p className="mt-3 text-[var(--app-muted)]">{t.featuresSubtitle}</p>
             <ul className="mt-6 space-y-3 text-sm text-[var(--app-muted)]">
-              {[
-                'Traducción de texto y audio en tiempo real',
-                'Whisper + TTS con caché inteligente',
-                'Sin fricción: entra y habla en tu idioma',
-              ].map((item) => (
+              {t.features.map((item) => (
                 <li key={item} className="flex items-start gap-2">
                   <span
                     className="mt-0.5 inline-block h-1.5 w-1.5 shrink-0 rounded-full"
@@ -217,10 +250,10 @@ export function LandingView() {
                       EN
                     </span>
                   </p>
-                  <p className="mt-1 text-sm">Hola, ¿cómo estás?</p>
+                  <p className="mt-1 text-sm">{t.chatTranslated}</p>
                   <p className="mt-2 border-l-2 border-[var(--app-primary)]/40 pl-2 text-xs text-[var(--app-muted)]">
                     <span className="font-semibold text-[var(--app-text)]">
-                      Original (EN)
+                      {t.chatOriginal}
                     </span>
                     <br />
                     Hello, how are you?
@@ -233,14 +266,24 @@ export function LandingView() {
       </section>
 
       <section
+        id="pricing"
+        className="border-t border-[var(--app-border)] bg-[var(--app-bg)] px-4 py-16 sm:px-6 sm:py-20"
+      >
+        <div className="mx-auto max-w-5xl">
+          <PricingTable
+            locale={lang}
+            onSelectPlan={handlePricingSelect}
+          />
+        </div>
+      </section>
+
+      <section
         id="join-panel"
         className="border-t border-[var(--app-border)] bg-[var(--app-bg)] px-4 py-12 sm:px-6 sm:py-14"
       >
         <div className="mx-auto max-w-md min-w-0">
-          <h2 className="text-xl font-bold">Unirse con código</h2>
-          <p className="mt-2 text-sm text-[var(--app-muted)]">
-            Pega el código del enlace o escanea el QR compartido.
-          </p>
+          <h2 className="text-xl font-bold">{t.joinTitle}</h2>
+          <p className="mt-2 text-sm text-[var(--app-muted)]">{t.joinSubtitle}</p>
           <form
             className="mt-5 flex min-w-0 flex-col gap-2 sm:flex-row"
             onSubmit={(e) => {
@@ -252,12 +295,12 @@ export function LandingView() {
               type="text"
               value={inviteCode}
               onChange={(e) => setInviteCode(e.target.value.toUpperCase())}
-              placeholder="Ej. ABC12345"
+              placeholder={t.joinPlaceholder}
               className={`${uiInput} min-w-0 font-mono uppercase tracking-widest`}
             />
             <FormSubmitLabel
               id="landing-join-submit"
-              label="Unirse"
+              label={t.joinSubmit}
               className={`${uiBtnPrimary} sm:w-auto sm:shrink-0 sm:px-8`}
             />
           </form>

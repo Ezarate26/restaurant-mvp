@@ -2,6 +2,13 @@
 
 import { useState, type UIEvent } from 'react';
 import type { ConversationMember, Message } from '@/lib/model/types';
+import { BillingStatusBadge } from '@/components/billing/BillingStatusBadge';
+import { RoomFreeSessionEndedGuestModal } from '@/components/billing/RoomFreeSessionEndedGuestModal';
+import { RoomGuestClosedModal } from '@/components/billing/RoomGuestClosedModal';
+import { RoomTimeExpiredModal } from '@/components/billing/RoomTimeExpiredModal';
+import { RoomTimer } from '@/components/billing/RoomTimer';
+import { UpgradeBanner } from '@/components/billing/UpgradeBanner';
+import { UpgradeModal } from '@/components/billing/UpgradeModal';
 import { ChatHeader } from '@/components/chat/ChatHeader';
 import { ChatMessagesPane } from '@/components/chat/ChatMessagesPane';
 import { ChatComposer } from '@/components/chat/ChatComposer';
@@ -11,6 +18,11 @@ import { ParticipantsSidebar } from '@/components/conversation/ParticipantsSideb
 import { AppSidebar } from '@/components/layout/AppSidebar';
 import { MobileNavProvider } from '@/components/layout/MobileNavContext';
 import { TapButton } from '@/components/ui/TapButton';
+import { usePlan } from '@/lib/billing/PlanProvider';
+import { useConversationRoomLimits } from '@/lib/billing/useConversationRoomLimits';
+import { markPendingRoomPassExtension } from '@/lib/billing/room-session.storage';
+import { useRoomSessionEnforcement } from '@/lib/billing/useRoomSessionEnforcement';
+import { useCallback, useEffect } from 'react';
 
 export interface ConversationChatViewProps {
   conversationId: string;
@@ -21,12 +33,15 @@ export interface ConversationChatViewProps {
   composerDisabled?: boolean;
   closureBanner?: string | null;
   onLeaveConversation?: () => void | Promise<void>;
+  onLeaveConversationSilent?: () => void | Promise<void>;
   onCloseConversation?: () => void | Promise<void>;
+  onCloseConversationSilent?: () => void | Promise<void>;
   leaveBusy?: boolean;
   isOwner?: boolean;
   showStartNewSession?: boolean;
   newSessionBusy?: boolean;
   onStartNewSession?: () => void | Promise<void>;
+  onGoHome?: (sessionEndedByTime?: boolean) => void | Promise<void>;
   headerLabel?: string;
   currentMemberId?: string | null;
   viewerLanguage?: string | null;
@@ -51,6 +66,13 @@ export interface ConversationChatViewProps {
   onStartVoice?: () => void | Promise<void>;
   onStopVoice?: () => void | Promise<void>;
   onCancelVoice?: () => void;
+  conversationCreatedAt?: string | null;
+  sessionExtraMs?: number;
+  ownerDisplayName?: string;
+  closerDisplayName?: string;
+  conversationStatus?: string | null;
+  closedByMemberId?: string | null;
+  onExtendSession?: (extraMs: number) => void | Promise<void>;
 }
 
 export function ConversationChatView({
@@ -62,12 +84,15 @@ export function ConversationChatView({
   composerDisabled = false,
   closureBanner = null,
   onLeaveConversation,
+  onLeaveConversationSilent,
   onCloseConversation,
+  onCloseConversationSilent,
   leaveBusy = false,
   isOwner = false,
   showStartNewSession = false,
   newSessionBusy = false,
   onStartNewSession,
+  onGoHome,
   headerLabel,
   currentMemberId = null,
   viewerLanguage = null,
@@ -92,14 +117,118 @@ export function ConversationChatView({
   onStartVoice,
   onStopVoice,
   onCancelVoice,
+  conversationCreatedAt = null,
+  sessionExtraMs = 0,
+  ownerDisplayName = 'el propietario',
+  closerDisplayName = 'El propietario',
+  conversationStatus = 'active',
+  closedByMemberId = null,
+  onExtendSession,
 }: ConversationChatViewProps) {
   const [leaveModalOpen, setLeaveModalOpen] = useState(false);
   const [closeModalOpen, setCloseModalOpen] = useState(false);
   const [inviteOpen, setInviteOpen] = useState(false);
   const [shareCopied, setShareCopied] = useState(false);
+  const [upgradeOpen, setUpgradeOpen] = useState(false);
+
+  const plan = usePlan();
+
+  useEffect(() => {
+    void plan.syncForConversation(conversationId);
+  }, [conversationId, plan.syncForConversation]);
+  const hasRoomPass = plan.hasActiveRoomPass(conversationId);
+  const roomLimits = useConversationRoomLimits(conversationId, sessionExtraMs);
+  const roomDurationMs =
+    roomLimits?.durationMs ?? plan.getRoomDurationMsForRoom(conversationId);
+  const roomUiMode = roomLimits?.uiMode ?? plan.uiMode;
+  const voiceAllowed = plan.canUseVoiceInRoom(conversationId);
+
+  const chatReturnUrl =
+    currentMemberId != null
+      ? `/c/${conversationId}?member=${encodeURIComponent(currentMemberId)}`
+      : `/c/${conversationId}`;
+
+  const baseConversationActive = !composerDisabled;
+
+  const handleRoomSessionEnd = useCallback(async () => {
+    if (isOwner) {
+      if (roomUiMode === 'free' && onCloseConversationSilent) {
+        await onCloseConversationSilent();
+        return;
+      }
+      if (onCloseConversation) {
+        await onCloseConversation();
+        return;
+      }
+    }
+    if (onLeaveConversation) {
+      await onLeaveConversation();
+    }
+  }, [
+    isOwner,
+    roomUiMode,
+    onCloseConversation,
+    onCloseConversationSilent,
+    onLeaveConversation,
+  ]);
+
+  const handleFreeGuestExpire = useCallback(async () => {
+    if (onLeaveConversationSilent) {
+      await onLeaveConversationSilent();
+    }
+  }, [onLeaveConversationSilent]);
+
+  const roomSession = useRoomSessionEnforcement({
+    conversationId,
+    createdAt: conversationCreatedAt,
+    durationMs: roomDurationMs,
+    sessionExtraMs,
+    uiMode: roomUiMode,
+    isOwner,
+    isConversationActive: baseConversationActive,
+    hasActiveRoomPass: hasRoomPass,
+    onEndSession: handleRoomSessionEnd,
+    onExtendSession: onExtendSession ?? (async () => undefined),
+    onFreeGuestExpire: handleFreeGuestExpire,
+  });
+
+  const effectiveComposerDisabled =
+    composerDisabled || roomSession.roomTimeBlocked;
 
   const activeCount = members.filter((m) => !m.left_at).length;
-  const isActive = !composerDisabled;
+  const isActive = !effectiveComposerDisabled;
+  const showFreeUpgrade =
+    isOwner &&
+    plan.tier === 'free' &&
+    !hasRoomPass &&
+    isActive &&
+    !roomSession.roomTimeBlocked;
+
+  const proGuestBoostActive =
+    roomUiMode === 'free' && sessionExtraMs > 0 && isActive;
+
+  const freeOwnerUpgradeOpen =
+    roomSession.freeEndedKind === 'owner-upgrade';
+  const freeGuestEndedOpen = roomSession.freeEndedKind === 'guest-ended';
+
+  const showGuestClosedModal =
+    !isOwner &&
+    conversationStatus === 'closed' &&
+    Boolean(closedByMemberId) &&
+    closedByMemberId !== currentMemberId &&
+    !freeGuestEndedOpen;
+
+  useEffect(() => {
+    if (roomSession.roomTimeBlocked && isRecordingVoice && onCancelVoice) {
+      onCancelVoice();
+    }
+  }, [roomSession.roomTimeBlocked, isRecordingVoice, onCancelVoice]);
+
+  useEffect(() => {
+    if (!freeGuestEndedOpen || !onGoHome) return;
+    const timer = window.setTimeout(() => void onGoHome(true), 2500);
+    return () => window.clearTimeout(timer);
+  }, [freeGuestEndedOpen, onGoHome]);
 
   const handleShare = async () => {
     const url =
@@ -128,7 +257,7 @@ export function ConversationChatView({
         shareUrl={shareUrl}
         onShare={() => void handleShare()}
         onOpenQr={() => setInviteOpen(true)}
-        composerDisabled={composerDisabled}
+        composerDisabled={effectiveComposerDisabled}
         activeSession={
           currentMemberId
             ? {
@@ -150,7 +279,7 @@ export function ConversationChatView({
           participantCount={activeCount}
           isActive={isActive}
           isOwner={isOwner}
-          composerDisabled={composerDisabled}
+          composerDisabled={effectiveComposerDisabled}
           onOpenParticipants={
             onParticipantsOpenChange
               ? () => onParticipantsOpenChange(true)
@@ -159,16 +288,55 @@ export function ConversationChatView({
           onOpenInvite={() => setInviteOpen(true)}
           onShare={() => void handleShare()}
           onLeave={
-            onLeaveConversation && !composerDisabled
+            onLeaveConversation && !effectiveComposerDisabled
               ? () => setLeaveModalOpen(true)
               : undefined
           }
           onCloseConversation={
-            isOwner && onCloseConversation && !composerDisabled
+            isOwner && onCloseConversation && !effectiveComposerDisabled
               ? () => setCloseModalOpen(true)
               : undefined
           }
         />
+
+        {showFreeUpgrade ? (
+          <UpgradeBanner
+            variant="compact"
+            message="Pro: voz, todos los idiomas y salas de 60 min."
+            onUpgrade={() => setUpgradeOpen(true)}
+          />
+        ) : null}
+
+        {proGuestBoostActive ? (
+          <div className="shrink-0 border-b border-[var(--app-success)]/30 bg-[var(--app-success)]/10 px-3 py-2 text-center text-xs font-medium text-[var(--app-success)] sm:px-4">
+            Un participante Pro extendió esta sala a 60 minutos (el tiempo ya
+            transcurrido cuenta).
+          </div>
+        ) : null}
+
+        <div className="flex shrink-0 items-center justify-between gap-2 border-b border-[var(--app-border)] bg-[var(--app-sidebar)] px-3 py-1.5 sm:px-4">
+          <BillingStatusBadge
+            tier={plan.tier}
+            roomPassActive={hasRoomPass}
+            compact
+          />
+          <RoomTimer
+            createdAt={conversationCreatedAt}
+            durationMs={roomDurationMs}
+            extraMs={sessionExtraMs}
+            compact
+          />
+        </div>
+
+        {roomSession.roomTimeBlocked && baseConversationActive ? (
+          <div className="shrink-0 border-b border-[var(--app-warning)]/30 bg-[var(--app-warning)]/10 px-3 py-2 text-center text-xs font-medium text-[var(--app-warning)] sm:px-4">
+            {roomUiMode === 'free' && !isOwner
+              ? `Se acabó la sesión de la sala de ${ownerDisplayName}.`
+              : isOwner
+                ? 'Tiempo de sala agotado — el chat está pausado hasta que elijas una opción.'
+                : `Tiempo de sala agotado — esperando nueva sesión de ${ownerDisplayName}.`}
+          </div>
+        ) : null}
 
         {shareCopied ? (
           <div className="shrink-0 bg-[var(--app-success)]/15 px-4 py-1.5 text-center text-xs font-medium text-[var(--app-success)]">
@@ -188,8 +356,8 @@ export function ConversationChatView({
           </div>
         ) : null}
 
-        <div className="flex min-h-0 flex-1 overflow-hidden">
-          <main className="flex min-h-0 min-w-0 flex-1 flex-col">
+        <div className="flex min-h-0 flex-1 overflow-x-hidden overflow-y-visible">
+          <main className="flex min-h-0 min-w-0 flex-1 flex-col overflow-visible">
             <ChatMessagesPane
               messages={messages}
               currentMemberId={currentMemberId}
@@ -204,7 +372,7 @@ export function ConversationChatView({
 
             <ChatComposer
               message={message}
-              disabled={composerDisabled}
+              disabled={effectiveComposerDisabled}
               isRecording={isRecordingVoice}
               voiceBusy={voiceBusy}
               waveformLevels={waveformLevels}
@@ -212,6 +380,8 @@ export function ConversationChatView({
               micActive={micActive}
               micMuted={micMuted}
               canSendRecording={canSendRecording}
+              voiceAllowed={voiceAllowed}
+              onVoiceUpgrade={() => setUpgradeOpen(true)}
               onMessageChange={onMessageChange}
               onSend={onSend}
               onStartVoice={
@@ -234,7 +404,7 @@ export function ConversationChatView({
               members={members}
               currentMemberId={currentMemberId}
               isOwner={isOwner}
-              canManage={!composerDisabled}
+              canManage={!effectiveComposerDisabled}
               expelBusy={expelBusy}
               onExpelMember={onExpelMember}
               embedded
@@ -249,7 +419,7 @@ export function ConversationChatView({
         members={members}
         currentMemberId={currentMemberId}
         isOwner={isOwner}
-        canManage={!composerDisabled}
+        canManage={!effectiveComposerDisabled}
         expelBusy={expelBusy}
         onExpelMember={onExpelMember}
       />
@@ -290,6 +460,63 @@ export function ConversationChatView({
           } catch {
             /* reintentar */
           }
+        }}
+      />
+
+      <RoomTimeExpiredModal
+        open={roomSession.expiredModalOpen}
+        isOwner={isOwner}
+        ownerDisplayName={ownerDisplayName}
+        uiMode={roomUiMode}
+        graceRemainingMs={roomSession.graceRemainingMs}
+        busy={roomSession.sessionEnding || leaveBusy}
+        onContinuePro={roomSession.handleProContinue}
+        onBuyRoomPass={() => {
+          markPendingRoomPassExtension(conversationId);
+          void plan.buyRoomPass(conversationId, `/c/${conversationId}`);
+        }}
+        onEndSession={() => void roomSession.handleEndSession()}
+        onLeave={
+          onLeaveConversation
+            ? () => void onLeaveConversation()
+            : undefined
+        }
+      />
+
+      <RoomFreeSessionEndedGuestModal
+        open={freeGuestEndedOpen}
+        ownerDisplayName={ownerDisplayName}
+        onGoHome={() => void onGoHome?.(true)}
+      />
+
+      <RoomGuestClosedModal
+        open={showGuestClosedModal}
+        closerDisplayName={closerDisplayName}
+        isAuthenticated={plan.isAuthenticated}
+        onUpgrade={() => setUpgradeOpen(true)}
+        onGoHome={() => void onGoHome?.(false)}
+      />
+
+      <UpgradeModal
+        open={upgradeOpen || freeOwnerUpgradeOpen}
+        variant={freeOwnerUpgradeOpen ? 'free-time-expired' : 'voice'}
+        onClose={() => {
+          if (freeOwnerUpgradeOpen) {
+            void onGoHome?.(true);
+            return;
+          }
+          setUpgradeOpen(false);
+        }}
+        requiresAuth={!plan.isAuthenticated}
+        onRegisterLeave={async () => {
+          setUpgradeOpen(false);
+          await onLeaveConversationSilent?.();
+          window.location.href = '/auth/register?redirect=/app/billing';
+        }}
+        onUpgrade={() => plan.upgradeToPro(chatReturnUrl)}
+        onBuyRoomPass={async () => {
+          markPendingRoomPassExtension(conversationId);
+          await plan.buyRoomPass(conversationId, chatReturnUrl);
         }}
       />
     </div>

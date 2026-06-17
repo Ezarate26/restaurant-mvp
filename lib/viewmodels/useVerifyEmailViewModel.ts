@@ -5,6 +5,8 @@ import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
 import { readPendingVerifyCredentials } from '@/lib/auth/pending-registration.storage';
 import { finalizePendingRegistration } from '@/lib/auth/finalize-pending-registration';
+import { markShowProInvite } from '@/lib/auth/pro-invite.storage';
+import { AUTH_HOME_PATH } from '@/lib/constants/routes';
 
 function isEmailNotConfirmedMessage(msg: string): boolean {
   const m = msg.toLowerCase();
@@ -32,7 +34,8 @@ export function useVerifyEmailViewModel() {
         setProvisionError(result.message);
         return false;
       }
-      router.replace('/');
+      markShowProInvite();
+      router.replace(AUTH_HOME_PATH);
       return true;
     },
     [router]

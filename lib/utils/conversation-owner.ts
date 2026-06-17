@@ -1,9 +1,24 @@
-/** El participante es owner si `role === 'owner'` o coincide con `owner_member_id`. */
+import type { ConversationMember } from '@/lib/model/types';
 
-export function isConversationOwner(
-  ownerMemberId: string | null | undefined,
-  memberId: string | null | undefined
-): boolean {
-  if (!ownerMemberId?.trim() || !memberId?.trim()) return false;
-  return ownerMemberId.trim() === memberId.trim();
+export function resolveOwnerDisplayName(
+  members: ConversationMember[],
+  ownerMemberId?: string | null
+): string {
+  const owner =
+    (ownerMemberId
+      ? members.find((m) => m.id === ownerMemberId)
+      : undefined) ??
+    members.find((m) => m.role === 'owner' && !m.left_at);
+
+  return owner?.display_name?.trim() || 'el propietario';
+}
+
+export function resolveMemberDisplayName(
+  members: ConversationMember[],
+  memberId?: string | null,
+  fallback = 'Alguien'
+): string {
+  if (!memberId) return fallback;
+  const member = members.find((m) => m.id === memberId);
+  return member?.display_name?.trim() || fallback;
 }

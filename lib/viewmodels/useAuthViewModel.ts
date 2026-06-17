@@ -4,6 +4,15 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useRouter, usePathname } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
 import { savePendingVerifyCredentials } from '@/lib/auth/pending-registration.storage';
+import { markShowProInvite } from '@/lib/auth/pro-invite.storage';
+import {
+  AUTH_ENTRY_PATHS,
+  AUTH_HOME_PATH,
+} from '@/lib/constants/routes';
+import {
+  isValidPhoneNumber,
+  normalizePhoneNumber,
+} from '@/lib/utils/phone';
 
 const MIN_PASSWORD_LEN = 6;
 
@@ -27,6 +36,7 @@ export function useAuthViewModel(initialIsLogin = true) {
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [fullName, setFullName] = useState('');
+  const [phone, setPhone] = useState('');
   const [formError, setFormError] = useState<string | null>(null);
 
   const registerPasswordMismatch = useMemo(
@@ -42,11 +52,13 @@ export function useAuthViewModel(initialIsLogin = true) {
   }, [isLogin]);
 
   useEffect(() => {
-    if (pathname !== '/login') return;
+    if (!AUTH_ENTRY_PATHS.includes(pathname as (typeof AUTH_ENTRY_PATHS)[number])) {
+      return;
+    }
     let cancelled = false;
     void supabase.auth.getSession().then(({ data }) => {
       if (cancelled || !data.session?.user) return;
-      router.replace('/');
+      router.replace(AUTH_HOME_PATH);
     });
     return () => {
       cancelled = true;
@@ -84,7 +96,7 @@ export function useAuthViewModel(initialIsLogin = true) {
         return;
       }
 
-      router.push('/');
+      router.push(AUTH_HOME_PATH);
       return;
     }
 
@@ -99,12 +111,23 @@ export function useAuthViewModel(initialIsLogin = true) {
       return;
     }
 
+    const phoneNormalized = normalizePhoneNumber(phone);
+    if (!phoneNormalized) {
+      setFormError('Ingresa tu número telefónico.');
+      return;
+    }
+    if (!isValidPhoneNumber(phoneNormalized)) {
+      setFormError('Ingresa un número telefónico válido (10 a 15 dígitos).');
+      return;
+    }
+
     const { data: signUpData, error } = await supabase.auth.signUp({
       email,
       password,
       options: {
         data: {
           full_name: fullName.trim() || null,
+          phone: phoneNormalized,
         },
       },
     });
@@ -115,7 +138,8 @@ export function useAuthViewModel(initialIsLogin = true) {
     }
 
     if (signUpData.session) {
-      router.replace('/');
+      markShowProInvite();
+      router.replace(AUTH_HOME_PATH);
       return;
     }
 
@@ -127,6 +151,7 @@ export function useAuthViewModel(initialIsLogin = true) {
     confirmPassword,
     isLogin,
     fullName,
+    phone,
     router,
   ]);
 
@@ -145,6 +170,8 @@ export function useAuthViewModel(initialIsLogin = true) {
     setShowConfirmPassword,
     fullName,
     setFullName,
+    phone,
+    setPhone,
     formError,
     registerPasswordMismatch,
     handleAuth,
