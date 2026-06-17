@@ -1,6 +1,7 @@
 'use client';
 
 import type { ReactNode } from 'react';
+import { ConversaIcon } from '@/components/brand/ConversaIcon';
 import { AppSidebar } from '@/components/layout/AppSidebar';
 import {
   MobileNavButton,
@@ -47,9 +48,14 @@ export function AppShell({
       <div className="flex min-h-screen overflow-x-hidden bg-[var(--app-bg)] text-[var(--app-text)]">
         <AppSidebar />
         <main className="flex min-h-0 min-w-0 flex-1 flex-col overflow-y-auto app-scrollbar">
-          <div className="relative z-app-header flex shrink-0 items-center justify-between gap-2 border-b border-[var(--app-border)] bg-[var(--app-sidebar)] px-3 py-2 lg:hidden">
+          <div className="relative z-app-header grid shrink-0 grid-cols-[auto_1fr_auto] items-center gap-2 border-b border-[var(--app-border)] bg-[var(--app-sidebar)] px-3 py-2 lg:hidden">
             <MobileNavButton />
-            <ThemeToggle compact />
+            <div className="flex justify-center">
+              <ConversaIcon size={28} className="rounded-lg" />
+            </div>
+            <div className="flex justify-end">
+              <ThemeToggle compact />
+            </div>
           </div>
           <div
             className={`mx-auto w-full min-w-0 ${maxClass} relative z-0 px-3 py-6 sm:px-6 sm:py-10`}

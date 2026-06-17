@@ -3,6 +3,9 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
+    "sync:brand": "node scripts/sync-brand-icons.mjs",
+    "predev": "npm run sync:brand",
+    "prebuild": "npm run sync:brand",
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
@@ -13,7 +16,8 @@
     "bcryptjs": "^3.0.3",
     "next": "16.2.4",
     "react": "19.2.4",
-    "react-dom": "19.2.4"
+    "react-dom": "19.2.4",
+    "stripe": "^22.2.1"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4",
@@ -23,6 +27,7 @@
     "@types/react-dom": "^19",
     "eslint": "^9",
     "eslint-config-next": "16.2.4",
+    "png-to-ico": "^3.0.1",
     "tailwindcss": "^4",
     "typescript": "^5"
   }

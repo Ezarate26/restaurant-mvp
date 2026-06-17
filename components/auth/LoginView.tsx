@@ -1,6 +1,7 @@
 'use client';
 
 import Link from 'next/link';
+import { ConversaBrand } from '@/components/brand/ConversaBrand';
 import { ThemeToggle } from '@/components/ui/ThemeToggle';
 import { FormSubmitLabel } from '@/components/ui/FormSubmitLabel';
 import { TapButton } from '@/components/ui/TapButton';
@@ -12,6 +13,7 @@ import {
   uiInput,
   uiLabel,
 } from '@/components/ui/ui-classes';
+import { sanitizePhoneInput } from '@/lib/utils/phone';
 
 export interface LoginViewProps {
   isLogin: boolean;
@@ -28,6 +30,8 @@ export interface LoginViewProps {
   onToggleShowConfirmPassword: () => void;
   fullName: string;
   onFullNameChange: (value: string) => void;
+  phone: string;
+  onPhoneChange: (value: string) => void;
   formError: string | null;
   registerPasswordMismatch: boolean;
   onSubmit: () => void;
@@ -48,6 +52,8 @@ export function LoginView({
   onToggleShowConfirmPassword,
   fullName,
   onFullNameChange,
+  phone,
+  onPhoneChange,
   formError,
   registerPasswordMismatch,
   onSubmit,
@@ -59,15 +65,7 @@ export function LoginView({
           <ThemeToggle compact />
         </div>
       </div>
-      <Link
-        href="/"
-        className="mb-8 flex items-center gap-2 text-[var(--app-muted)] hover:text-[var(--app-text)]"
-      >
-        <span className="grid h-9 w-9 place-items-center rounded-full bg-[var(--app-accent)] text-sm font-bold text-white">
-          C
-        </span>
-        <span className="font-bold text-[var(--app-text)]">Conversa</span>
-      </Link>
+      <ConversaBrand href="/" size={36} className="mb-8" />
 
       <div className={`${uiCard} relative z-10 w-full min-w-0 max-w-md`}>
         <div className="mb-6 text-center">
@@ -102,9 +100,30 @@ export function LoginView({
             </div>
           )}
 
+          {!isLogin && (
+            <div>
+              <label className={uiLabel} htmlFor="auth-phone">
+                Número telefónico
+              </label>
+              <input
+                id="auth-phone"
+                type="tel"
+                className={uiInput}
+                placeholder="+52 55 1234 5678"
+                value={phone}
+                onChange={(e) => onPhoneChange(sanitizePhoneInput(e.target.value))}
+                autoComplete="tel"
+                inputMode="tel"
+              />
+            </div>
+          )}
+
           <div>
-            <label className={uiLabel}>Correo</label>
+            <label className={uiLabel} htmlFor="auth-email">
+              Correo
+            </label>
             <input
+              id="auth-email"
               className={uiInput}
               placeholder="tu@email.com"
               value={email}

@@ -9,7 +9,7 @@ import {
   uiModalTitle,
 } from '@/components/ui/ui-classes';
 
-export type LeaveConversationIntent = 'join' | 'register' | 'login';
+export type LeaveConversationIntent = 'join' | 'register' | 'login' | 'logout';
 
 type SwitchConversationModalProps = {
   open: boolean;
@@ -29,22 +29,33 @@ export function SwitchConversationModal({
   onConfirm,
 }: SwitchConversationModalProps) {
   const isAuth = intent === 'register' || intent === 'login';
+  const isLogout = intent === 'logout';
 
-  const title = isAuth
-    ? intent === 'register'
-      ? 'Registrarse'
-      : 'Iniciar sesión'
-    : 'Cambiar de conversación';
+  const title = isLogout
+    ? 'Cerrar sesión'
+    : isAuth
+      ? intent === 'register'
+        ? 'Registrarse'
+        : 'Iniciar sesión'
+      : 'Cambiar de conversación';
 
-  const description = isOwner
-    ? 'Eres el propietario de esta conversación. Si abandonas la conversación actual esta será cerrada para todos los participantes. ¿Deseas continuar?'
-    : 'Actualmente participas en una conversación. Si continúas abandonarás la conversación actual. ¿Deseas continuar?';
+  const description = isLogout
+    ? isOwner
+      ? 'Eres el propietario de esta conversación. Al cerrar sesión saldrás de la sala y la conversación se cerrará para todos los participantes.'
+      : 'Actualmente participas en una conversación. Al cerrar sesión saldrás de la sala antes de salir de tu cuenta.'
+    : isOwner
+      ? 'Eres el propietario de esta conversación. Si abandonas la conversación actual esta será cerrada para todos los participantes. ¿Deseas continuar?'
+      : 'Actualmente participas en una conversación. Si continúas abandonarás la conversación actual. ¿Deseas continuar?';
 
   const confirmLabel = busy
-    ? 'Procesando…'
-    : isOwner
-      ? 'Cerrar conversación y continuar'
-      : 'Salir y continuar';
+    ? isLogout
+      ? 'Cerrando sesión…'
+      : 'Procesando…'
+    : isLogout
+      ? 'Cerrar sesión'
+      : isOwner
+        ? 'Cerrar conversación y continuar'
+        : 'Salir y continuar';
 
   return (
     <ModalFrame open={open} labelledBy="switch-conv-title" onClose={onCancel}>

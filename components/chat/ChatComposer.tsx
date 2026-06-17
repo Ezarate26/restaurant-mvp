@@ -1,6 +1,7 @@
 'use client';
 
 import { VoiceRecordingBar } from '@/components/chat/VoiceRecordingBar';
+import { VoiceButton } from '@/components/billing/VoiceButton';
 import { TapButton } from '@/components/ui/TapButton';
 
 type ChatComposerProps = {
@@ -13,11 +14,13 @@ type ChatComposerProps = {
   micActive?: boolean;
   micMuted?: boolean;
   canSendRecording?: boolean;
+  voiceAllowed?: boolean;
   onMessageChange: (value: string) => void;
   onSend: () => void;
   onStartVoice?: () => void;
   onStopVoice?: () => void;
   onCancelVoice?: () => void;
+  onVoiceUpgrade?: () => void;
 };
 
 export function ChatComposer({
@@ -30,16 +33,22 @@ export function ChatComposer({
   micActive = false,
   micMuted = false,
   canSendRecording = false,
+  voiceAllowed = true,
   onMessageChange,
   onSend,
   onStartVoice,
   onStopVoice,
   onCancelVoice,
+  onVoiceUpgrade,
 }: ChatComposerProps) {
   const canSend = !disabled && message.trim().length > 0;
+  const showVoiceTooltipSpace =
+    Boolean(onStartVoice) && !voiceAllowed && !isRecording && !voiceBusy;
 
   return (
-    <div className="shrink-0 bg-[var(--app-sidebar)] px-3 pt-2 pb-[calc(env(safe-area-inset-bottom)+0.875rem)] sm:px-4 sm:pb-[calc(env(safe-area-inset-bottom)+1rem)]">
+    <div
+      className={`relative z-10 shrink-0 overflow-visible bg-[var(--app-sidebar)] px-3 pb-[calc(env(safe-area-inset-bottom)+0.875rem)] sm:px-4 sm:pb-[calc(env(safe-area-inset-bottom)+1rem)] ${showVoiceTooltipSpace ? 'pt-10 sm:pt-10' : 'pt-2'}`}
+    >
       {isRecording || voiceBusy ? (
         <VoiceRecordingBar
           waveformLevels={waveformLevels}
@@ -52,16 +61,14 @@ export function ChatComposer({
           onSend={onStopVoice ?? (() => undefined)}
         />
       ) : (
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 overflow-visible">
           {onStartVoice ? (
-            <TapButton
-              onTap={onStartVoice}
+            <VoiceButton
+              allowed={voiceAllowed}
               disabled={disabled || voiceBusy}
-              aria-label="Grabar mensaje de voz"
-              className="app-touchable touch-target flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-lg text-[var(--app-muted)] hover:text-[var(--app-primary)] disabled:opacity-40"
-            >
-              🎤
-            </TapButton>
+              onStart={onStartVoice}
+              onUpgradeRequest={onVoiceUpgrade}
+            />
           ) : null}
           <div className="flex min-w-0 flex-1 items-center gap-2 rounded-xl bg-[var(--chat-input-bg)] px-3 py-2 ring-1 ring-[var(--app-border)]">
             <input

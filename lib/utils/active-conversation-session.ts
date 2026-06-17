@@ -1,3 +1,7 @@
+import type { SupabaseClient } from '@supabase/supabase-js';
+import { fetchMemberById } from '@/lib/model/conversation-members.repository';
+import { fetchConversationById } from '@/lib/model/conversations-table.repository';
+
 const STORAGE_KEY = 'conversationPlatform.activeSession';
 
 export type ActiveConversationSession = {
@@ -31,4 +35,24 @@ export function setActiveConversationSession(
 export function clearActiveConversationSession(): void {
   if (typeof window === 'undefined') return;
   localStorage.removeItem(STORAGE_KEY);
+}
+
+/** Elimina sesión local si la conversación cerró o el miembro ya salió. */
+export async function resolveActiveConversationSession(
+  client: SupabaseClient
+): Promise<ActiveConversationSession | null> {
+  const active = getActiveConversationSession();
+  if (!active) return null;
+
+  const [conv, mem] = await Promise.all([
+    fetchConversationById(client, active.conversationId),
+    fetchMemberById(client, active.memberId),
+  ]);
+
+  if (!conv || conv.status === 'closed' || !mem || mem.left_at) {
+    clearActiveConversationSession();
+    return null;
+  }
+
+  return active;
 }

@@ -24,6 +24,8 @@ export default function AuthPage() {
       }
       fullName={vm.fullName}
       onFullNameChange={vm.setFullName}
+      phone={vm.phone}
+      onPhoneChange={vm.setPhone}
       formError={vm.formError}
       registerPasswordMismatch={vm.registerPasswordMismatch}
       onSubmit={vm.handleAuth}

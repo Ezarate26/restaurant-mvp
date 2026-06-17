@@ -1,8 +1,9 @@
 'use client';
 
 import { useRouter, useParams } from 'next/navigation';
-import { useState, type FormEvent } from 'react';
+import { useEffect, useState, type FormEvent } from 'react';
 import { AppShell } from '@/components/layout/AppShell';
+import { FreePlanLimitsHint } from '@/components/billing/FreePlanLimitsHint';
 import { SwitchConversationModal } from '@/components/conversation/SwitchConversationModal';
 import { FormSubmitLabel } from '@/components/ui/FormSubmitLabel';
 import {
@@ -17,21 +18,38 @@ import { joinConversation } from '@/lib/model/conversations.repository';
 import {
   markAllMembersLeft,
   markMemberLeft,
+  fetchActiveMembersByConversation,
 } from '@/lib/model/conversation-members.repository';
-import { closeConversationRecord } from '@/lib/model/conversations-table.repository';
-import { LANGUAGES, normalizeLanguageCode } from '@/constants/languages';
+import { closeConversationRecord, fetchConversationByInviteCode } from '@/lib/model/conversations-table.repository';
+import { fetchConversationRoomLimits } from '@/lib/billing/conversation-room-limits-client';
+import type { BillingUiMode } from '@/lib/billing/billing-state';
+import { getJoinLanguageOptions } from '@/lib/billing/language-access';
+import { shouldShowFreePlanLimitsHint } from '@/lib/billing/show-free-plan-hint';
+import { usePlan } from '@/lib/billing/PlanProvider';
+import { useSupabaseAuth } from '@/lib/hooks/useSupabaseAuth';
+import { normalizeLanguageCode } from '@/constants/languages';
 import { getOrCreateCustomerIdentifier } from '@/lib/utils/customerIdentifier';
 import {
   clearActiveConversationSession,
   getActiveConversationSession,
+  resolveActiveConversationSession,
 } from '@/lib/utils/active-conversation-session';
 import { supabase } from '@/lib/supabase';
+import { getErrorMessage } from '@/lib/utils/supabase-errors';
 
 export default function JoinConversationPage() {
   const router = useRouter();
   const params = useParams();
+  const { isAuthenticated } = useSupabaseAuth();
+  const { tier } = usePlan();
   const inviteCode = ((params.sessionId as string) ?? '').trim().toUpperCase();
   const [language, setLanguage] = useState('es');
+  const [languageOptions, setLanguageOptions] = useState(
+    getJoinLanguageOptions(false, false)
+  );
+  const [roomFull, setRoomFull] = useState(false);
+  const [roomMaxParticipants, setRoomMaxParticipants] = useState(2);
+  const [roomUiMode, setRoomUiMode] = useState<BillingUiMode | null>(null);
   const [displayName, setDisplayName] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -39,9 +57,54 @@ export default function JoinConversationPage() {
   const [pendingJoin, setPendingJoin] = useState(false);
   const [switchIsOwner, setSwitchIsOwner] = useState(false);
 
+  useEffect(() => {
+    if (!inviteCode) return;
+    let cancelled = false;
+    void (async () => {
+      const conversation = await fetchConversationByInviteCode(
+        supabase,
+        inviteCode
+      );
+      if (cancelled || !conversation) return;
+
+      const [limits, members] = await Promise.all([
+        fetchConversationRoomLimits(conversation.id),
+        fetchActiveMembersByConversation(supabase, conversation.id),
+      ]);
+      if (cancelled) return;
+
+      setRoomFull(members.length >= limits.maxParticipants);
+      setRoomMaxParticipants(limits.maxParticipants);
+      setRoomUiMode(limits.uiMode);
+      const options = getJoinLanguageOptions(
+        limits.allowAllLanguages,
+        isAuthenticated
+      );
+      setLanguageOptions(options);
+      setLanguage((prev) =>
+        options.some((l) => l.code === prev) ? prev : 'es'
+      );
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [inviteCode, isAuthenticated]);
+
   const performJoin = async () => {
     if (!inviteCode) {
       setError('Código de invitación no válido');
+      return;
+    }
+    if (!displayName.trim()) {
+      setError('Ingresa tu nombre visible para unirte a la conversación.');
+      return;
+    }
+    if (roomFull) {
+      setError(
+        roomMaxParticipants <= 2
+          ? 'Esta sala gratuita admite solo 2 participantes (tú y un invitado). Pro desbloquea hasta 10 invitados.'
+          : `Esta sala ya tiene el máximo de ${roomMaxParticipants} participantes.`
+      );
       return;
     }
     setBusy(true);
@@ -58,18 +121,20 @@ export default function JoinConversationPage() {
         `/c/${result.conversation_id}?member=${encodeURIComponent(result.member_id)}&lang=${encodeURIComponent(language)}`
       );
     } catch (e) {
-      setError(
-        e instanceof Error ? e.message : 'No se pudo unir a la conversación'
-      );
+      setError(getErrorMessage(e, 'unirte a la conversación'));
     } finally {
       setBusy(false);
       setPendingJoin(false);
     }
   };
 
-  const handleJoin = (e: FormEvent) => {
+  const showFreeHint =
+    roomUiMode != null &&
+    shouldShowFreePlanLimitsHint({ userTier: tier, roomUiMode });
+
+  const handleJoin = async (e: FormEvent) => {
     e.preventDefault();
-    const active = getActiveConversationSession();
+    const active = await resolveActiveConversationSession(supabase);
     if (active) {
       setSwitchIsOwner(active.isOwner);
       setSwitchOpen(true);
@@ -80,7 +145,9 @@ export default function JoinConversationPage() {
   };
 
   const handleSwitchConfirm = async () => {
-    const active = getActiveConversationSession();
+    const active =
+      (await resolveActiveConversationSession(supabase)) ??
+      getActiveConversationSession();
     if (!active) {
       setSwitchOpen(false);
       if (pendingJoin) void performJoin();
@@ -102,7 +169,7 @@ export default function JoinConversationPage() {
       setSwitchOpen(false);
       if (pendingJoin) await performJoin();
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'No se pudo cambiar de conversación');
+      setError(getErrorMessage(e, 'cambiar de conversación'));
     } finally {
       setBusy(false);
     }
@@ -121,6 +188,10 @@ export default function JoinConversationPage() {
             {inviteCode || '—'}
           </span>
         </p>
+
+        {showFreeHint ? (
+          <FreePlanLimitsHint variant="join" className="mt-4" />
+        ) : null}
 
         <label className={`${uiLabel} mt-6`} htmlFor="display-name">
           Nombre visible
@@ -143,12 +214,20 @@ export default function JoinConversationPage() {
           onChange={(e) => setLanguage(e.target.value)}
           className={uiSelect}
         >
-          {LANGUAGES.map((l) => (
+          {languageOptions.map((l) => (
             <option key={l.code} value={l.code}>
               {l.name}
             </option>
           ))}
         </select>
+
+        {roomFull ? (
+          <p className="mt-4 text-sm text-[var(--app-error)]">
+            {roomMaxParticipants <= 2
+              ? 'Esta sala gratuita ya tiene 2 participantes. Pro desbloquea hasta 10 invitados.'
+              : `Esta sala ya tiene el máximo de ${roomMaxParticipants} participantes.`}
+          </p>
+        ) : null}
 
         {error ? <p className={`${uiError} mt-4`}>{error}</p> : null}
 
@@ -157,7 +236,7 @@ export default function JoinConversationPage() {
           label="Entrar a la conversación"
           busyLabel="Entrando…"
           busy={busy}
-          disabled={!inviteCode}
+          disabled={!inviteCode || roomFull}
           className={`${uiBtnPrimary} mt-6 w-full`}
         />
       </form>

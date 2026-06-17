@@ -2,7 +2,9 @@
 
 import { useEffect, useState, type FormEvent } from 'react';
 import Link from 'next/link';
+import { ConversaIcon } from '@/components/brand/ConversaIcon';
 import { AppShell } from '@/components/layout/AppShell';
+import { FreePlanLimitsHint } from '@/components/billing/FreePlanLimitsHint';
 import { GuestLoginModal } from '@/components/conversation/GuestLoginModal';
 import { FormSubmitLabel } from '@/components/ui/FormSubmitLabel';
 import { TapButton } from '@/components/ui/TapButton';
@@ -16,6 +18,8 @@ import {
 } from '@/components/ui/ui-classes';
 import { LANGUAGES } from '@/constants/languages';
 
+type LanguageOption = { code: string; name: string };
+
 export interface JoinConversationViewProps {
   placeName: string;
   selectedLanguage: string | null;
@@ -23,6 +27,7 @@ export interface JoinConversationViewProps {
   onJoin: () => void;
   isConfirming: boolean;
   languageControlsDisabled?: boolean;
+  languageOptions?: LanguageOption[];
   createAccountHref: string;
   onSubmitLogin: (email: string, password: string) => Promise<void>;
   loginSubmitBusy?: boolean;
@@ -31,6 +36,7 @@ export interface JoinConversationViewProps {
   loginIntroMessage?: string | null;
   displayName?: string;
   onDisplayNameChange?: (name: string) => void;
+  showFreeLimitsHint?: boolean;
 }
 
 export function JoinConversationView({
@@ -40,6 +46,7 @@ export function JoinConversationView({
   onJoin,
   isConfirming,
   languageControlsDisabled,
+  languageOptions = LANGUAGES,
   createAccountHref,
   onSubmitLogin,
   loginSubmitBusy = false,
@@ -48,6 +55,7 @@ export function JoinConversationView({
   loginIntroMessage = null,
   displayName = '',
   onDisplayNameChange,
+  showFreeLimitsHint = true,
 }: JoinConversationViewProps) {
   const [loginOpen, setLoginOpen] = useState(false);
   const canSubmit = Boolean(selectedLanguage) && !languageControlsDisabled;
@@ -66,17 +74,18 @@ export function JoinConversationView({
     <AppShell>
       <form className={`${uiCard} min-w-0`} onSubmit={handleJoin}>
         <div className="mb-8 text-center">
-          <div
-            className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-full bg-[var(--app-accent)]/20 text-2xl"
-            aria-hidden
-          >
-            💬
+          <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center">
+            <ConversaIcon size={56} className="rounded-2xl" />
           </div>
           <h1 className="text-xl font-bold sm:text-2xl">{placeName}</h1>
           <p className="mt-2 text-sm text-[var(--app-muted)]">
             Selecciona tu idioma y únete a la conversación.
           </p>
         </div>
+
+        {showFreeLimitsHint ? (
+          <FreePlanLimitsHint variant="join" className="mb-4" />
+        ) : null}
 
         {onDisplayNameChange && (
           <>
@@ -107,7 +116,7 @@ export function JoinConversationView({
           <option value="" disabled>
             Elige un idioma
           </option>
-          {LANGUAGES.map((lang) => (
+          {languageOptions.map((lang) => (
             <option key={lang.code} value={lang.code}>
               {lang.name}
             </option>

@@ -3,6 +3,9 @@ import { Inter } from 'next/font/google';
 import './globals.css';
 import { SessionStoreProvider } from '@/lib/stores/sessionStore';
 import { ThemeProvider } from '@/lib/theme/ThemeProvider';
+import { PlanProvider } from '@/lib/billing/PlanProvider';
+import { AppLanguageProvider } from '@/lib/i18n/AppLanguageProvider';
+import { CONVERSA_ICON_SRC } from '@/lib/brand/constants';
 
 const inter = Inter({
   variable: '--font-app',
@@ -16,6 +19,11 @@ export const metadata: Metadata = {
   title: 'Conversa — Conversaciones multilingües',
   description:
     'Plataforma de conversaciones en tiempo real con traducción automática.',
+  icons: {
+    icon: [{ url: CONVERSA_ICON_SRC, type: 'image/png' }],
+    shortcut: [{ url: CONVERSA_ICON_SRC, type: 'image/png' }],
+    apple: [{ url: CONVERSA_ICON_SRC, type: 'image/png' }],
+  },
   appleWebApp: {
     capable: true,
     statusBarStyle: 'black-translucent',
@@ -49,11 +57,17 @@ export default function RootLayout({
       suppressHydrationWarning
     >
       <head>
+        <link rel="icon" href={CONVERSA_ICON_SRC} type="image/png" />
+        <link rel="apple-touch-icon" href={CONVERSA_ICON_SRC} />
         <script dangerouslySetInnerHTML={{ __html: themeInitScript }} />
       </head>
       <body className="touch-root min-h-full flex flex-col bg-[var(--app-bg)] text-[var(--app-text)] font-[family-name:var(--font-app)]">
         <ThemeProvider>
-          <SessionStoreProvider>{children}</SessionStoreProvider>
+          <AppLanguageProvider>
+            <PlanProvider>
+              <SessionStoreProvider>{children}</SessionStoreProvider>
+            </PlanProvider>
+          </AppLanguageProvider>
         </ThemeProvider>
       </body>
     </html>

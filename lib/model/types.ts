@@ -11,6 +11,8 @@ export interface Conversation {
   title: string | null;
   conversation_type: string | null;
   closed_by_member_id: string | null;
+  session_extra_ms?: number | null;
+  session_free_bonus_used?: boolean | null;
   created_at?: string | null;
   closed_at?: string | null;
 }
