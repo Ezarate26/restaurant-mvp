@@ -5,7 +5,7 @@ import { SessionStoreProvider } from '@/lib/stores/sessionStore';
 import { ThemeProvider } from '@/lib/theme/ThemeProvider';
 import { PlanProvider } from '@/lib/billing/PlanProvider';
 import { AppLanguageProvider } from '@/lib/i18n/AppLanguageProvider';
-import { CONVERSA_ICON_SRC } from '@/lib/brand/constants';
+import { CONVERSA_APP_NAME, CONVERSA_ICON_SRC, CONVERSA_SITE_URL } from '@/lib/brand/constants';
 
 const inter = Inter({
   variable: '--font-app',
@@ -16,9 +16,21 @@ const inter = Inter({
 const themeInitScript = `(function(){try{var t=localStorage.getItem('conversationPlatform.theme');document.documentElement.setAttribute('data-theme',t==='nebula-light'?'nebula-light':'nebula-dark');}catch(e){document.documentElement.setAttribute('data-theme','nebula-dark');}})();`;
 
 export const metadata: Metadata = {
-  title: 'Conversa — Conversaciones multilingües',
+  metadataBase: new URL(CONVERSA_SITE_URL),
+  title: {
+    default: `${CONVERSA_APP_NAME} — Conversaciones multilingües`,
+    template: `%s · ${CONVERSA_APP_NAME}`,
+  },
   description:
     'Plataforma de conversaciones en tiempo real con traducción automática.',
+  openGraph: {
+    type: 'website',
+    siteName: CONVERSA_APP_NAME,
+    url: CONVERSA_SITE_URL,
+    title: `${CONVERSA_APP_NAME} — Conversaciones multilingües`,
+    description:
+      'Plataforma de conversaciones en tiempo real con traducción automática.',
+  },
   icons: {
     icon: [{ url: CONVERSA_ICON_SRC, type: 'image/png' }],
     shortcut: [{ url: CONVERSA_ICON_SRC, type: 'image/png' }],
@@ -27,7 +39,7 @@ export const metadata: Metadata = {
   appleWebApp: {
     capable: true,
     statusBarStyle: 'black-translucent',
-    title: 'Conversa',
+    title: CONVERSA_APP_NAME,
   },
   formatDetection: {
     telephone: false,

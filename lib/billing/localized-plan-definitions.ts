@@ -21,3 +21,7 @@ export function getLocalizedPlanDefinitions(lang: AppLang): PlanDefinition[] {
 export function getPlanCardCopy(lang: AppLang) {
   return MESSAGES[lang].landing.planCard;
 }
+
+export function getProTrialCallout(lang: AppLang) {
+  return MESSAGES[lang].landing.proTrialCallout;
+}

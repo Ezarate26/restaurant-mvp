@@ -2,7 +2,7 @@
 
 import type { PlanDefinition } from '@/lib/billing/types';
 import type { BillingUiMode, UserBillingSnapshot } from '@/lib/billing/billing-state';
-import { PLAN_DEFINITIONS } from '@/lib/billing/constants';
+import { PLAN_DEFINITIONS, PRO_TRIAL_DAYS } from '@/lib/billing/constants';
 import { PlanCard } from '@/components/billing/PlanCard';
 import { StripePricingTable } from '@/components/billing/StripePricingTable';
 import { uiBtnPrimary, uiCard } from '@/components/ui/ui-classes';
@@ -110,6 +110,15 @@ export function BillingPlansSection({
           <h2 className="text-lg font-bold">Actualizar a Pro</h2>
           <p className="mt-2 text-sm text-[var(--app-muted)]">
             Obtén Pro en todas tus salas con suscripción mensual ($9.99 USD).
+            {!billing.trialUsed ? (
+              <span className="mt-1 block font-medium text-[var(--app-text)]">
+                Incluye{' '}
+                <strong className="text-[var(--app-success)]">
+                  {PRO_TRIAL_DAYS} días de prueba gratis
+                </strong>
+                .
+              </span>
+            ) : null}
           </p>
           <button
             type="button"
@@ -128,7 +137,9 @@ export function BillingPlansSection({
   const proPlan = PLAN_DEFINITIONS.find((p) => p.id === 'pro')!;
   const roomPlan = PLAN_DEFINITIONS.find((p) => p.id === 'room_pass')!;
 
-  const proCta = billing.trialUsed ? 'Suscribirse a Pro' : 'Probar Pro gratis';
+  const proCta = billing.trialUsed
+    ? 'Suscribirse a Pro'
+    : `Probar Pro ${PRO_TRIAL_DAYS} días gratis`;
 
   if (showStripeEmbed) {
     return (
@@ -139,7 +150,15 @@ export function BillingPlansSection({
             <span className="mt-1 block text-xs">
               Ya usaste tu prueba gratis. La suscripción Pro se cobrará al activarse.
             </span>
-          ) : null}
+          ) : (
+            <span className="mt-2 block text-sm font-medium text-[var(--app-text)]">
+              Pro incluye{' '}
+              <strong className="text-[var(--app-success)]">
+                {PRO_TRIAL_DAYS} días de prueba gratis
+              </strong>
+              . No se te cobrará hasta que termine el periodo de prueba.
+            </span>
+          )}
         </p>
         <StripePricingTable
           customerEmail={customerEmail}
@@ -151,7 +170,17 @@ export function BillingPlansSection({
   }
 
   return (
-    <div className="grid gap-5 md:grid-cols-3">
+    <div className="space-y-4">
+      {!billing.trialUsed ? (
+        <p className="rounded-xl border border-[var(--app-success)]/35 bg-[var(--app-success)]/10 px-4 py-3 text-center text-sm font-medium text-[var(--app-text)]">
+          El plan Pro incluye{' '}
+          <strong className="text-[var(--app-success)]">
+            {PRO_TRIAL_DAYS} días de prueba gratis
+          </strong>
+          . No se te cobrará hasta que termine el periodo de prueba (si eres elegible).
+        </p>
+      ) : null}
+      <div className="grid gap-5 md:grid-cols-3">
       <PlanCard
         plan={{ ...freePlan, cta: 'Plan actual' }}
         currentPlanId="free"
@@ -174,6 +203,7 @@ export function BillingPlansSection({
         }
         onSelect={() => onBuyRoomPass()}
       />
+    </div>
     </div>
   );
 }

@@ -1,5 +1,7 @@
 import { createClient } from '@supabase/supabase-js';
 
+import { siteUrl } from '@/lib/brand/site-url';
+
 export async function getUserIdFromRequest(request: Request): Promise<string | null> {
   const authHeader = request.headers.get('Authorization');
   if (!authHeader?.startsWith('Bearer ')) return null;
@@ -22,7 +24,5 @@ export async function getUserIdFromRequest(request: Request): Promise<string | n
 }
 
 export function appUrl(path = ''): string {
-  const base =
-    process.env.NEXT_PUBLIC_APP_URL?.replace(/\/$/, '') ?? 'http://localhost:3000';
-  return path ? `${base}${path.startsWith('/') ? path : `/${path}`}` : base;
+  return siteUrl(path);
 }

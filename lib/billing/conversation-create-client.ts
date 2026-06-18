@@ -1,10 +1,20 @@
 import { supabase } from '@/lib/supabase';
+import type { ConversationMember } from '@/lib/model/types';
 import type { FreeCreateEligibility } from '@/lib/billing/free-daily-limit.server';
+
+export type CreateConversationResponse = {
+  conversation_id: string;
+  member_id: string;
+  invite_code: string;
+  member: ConversationMember;
+};
 
 type CanCreateResponse = FreeCreateEligibility & {
   allowed?: boolean;
   error?: string;
 };
+
+type CreateApiResponse = CreateConversationResponse & { error?: string };
 
 async function authHeaders(): Promise<HeadersInit> {
   const { data } = await supabase.auth.getSession();
@@ -12,6 +22,34 @@ async function authHeaders(): Promise<HeadersInit> {
   const headers: HeadersInit = { 'Content-Type': 'application/json' };
   if (token) headers.Authorization = `Bearer ${token}`;
   return headers;
+}
+
+export async function createConversationViaApi(args: {
+  device_id: string;
+  display_name: string | null;
+  preferred_language: string;
+}): Promise<CreateConversationResponse> {
+  const res = await fetch('/api/conversations/create', {
+    method: 'POST',
+    headers: await authHeaders(),
+    body: JSON.stringify({
+      deviceId: args.device_id,
+      displayName: args.display_name,
+      preferredLanguage: args.preferred_language,
+    }),
+  });
+
+  const data = (await res.json()) as CreateApiResponse;
+  if (!res.ok) {
+    throw new Error(data.error ?? 'No se pudo crear la conversación');
+  }
+
+  return {
+    conversation_id: data.conversation_id,
+    member_id: data.member_id,
+    invite_code: data.invite_code,
+    member: data.member,
+  };
 }
 
 export async function fetchFreeCreateEligibility(

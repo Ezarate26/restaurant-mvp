@@ -1,4 +1,4 @@
-import { CONVERSA_ICON_SRC } from '@/lib/brand/constants';
+import { CONVERSA_APP_NAME, CONVERSA_ICON_SRC } from '@/lib/brand/constants';
 
 type ConversaIconProps = {
   size?: number;
@@ -9,7 +9,7 @@ type ConversaIconProps = {
 export function ConversaIcon({
   size = 32,
   className = '',
-  alt = 'Conversa',
+  alt = CONVERSA_APP_NAME,
 }: ConversaIconProps) {
   return (
     // eslint-disable-next-line @next/next/no-img-element

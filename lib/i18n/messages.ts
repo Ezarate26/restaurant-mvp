@@ -129,7 +129,10 @@ export type AppMessages = {
       perMonth: string;
       oneTime: string;
       usd: string;
+      proTrialBadge: string;
+      proTrialSubtext: string;
     };
+    proTrialCallout: string;
     demoUsers: [{ name: string; text: string }, { name: string; text: string }, { name: string; text: string }];
   };
 };
@@ -163,7 +166,7 @@ export const MESSAGES: Record<AppLang, AppMessages> = {
       logout: 'Cerrar sesión',
     },
     home: {
-      badge: 'Conversa',
+      badge: 'conversa-io.chat',
       greeting: 'Hola, {name}',
       subtitle:
         'Crea una sala nueva o únete con un código para empezar a conversar con traducción en tiempo real.',
@@ -260,7 +263,7 @@ export const MESSAGES: Record<AppLang, AppMessages> = {
       pricingBadge: 'Planes',
       pricingTitle: 'Escala cuando lo necesites',
       pricingSubtitle:
-        'Empieza gratis. Pro desde $9.99/mes USD. Pase por sala $2.99 USD.',
+        'Empieza gratis. Pro incluye 7 días de prueba — luego $9.99/mes USD. Pase por sala $2.99 USD.',
       plans: {
         free: {
           name: 'Free',
@@ -275,8 +278,9 @@ export const MESSAGES: Record<AppLang, AppMessages> = {
         },
         pro: {
           name: 'Pro',
-          cta: 'Suscribirse a Pro',
+          cta: 'Probar 7 días gratis',
           features: [
+            '7 días de prueba gratis',
             'Todos los idiomas',
             'Mensajes de voz con traducción',
             'Hasta 10 participantes',
@@ -302,7 +306,11 @@ export const MESSAGES: Record<AppLang, AppMessages> = {
         perMonth: 'por mes',
         oneTime: 'pago único',
         usd: 'USD',
+        proTrialBadge: '7 días de prueba gratis',
+        proTrialSubtext: 'Luego $9.99/mes USD · cancela cuando quieras',
       },
+      proTrialCallout:
+        'El plan Pro incluye 7 días de prueba gratis. No se te cobrará hasta que termine el periodo de prueba (si eres elegible).',
       demoUsers: [
         { name: 'Usuario 1', text: 'Hello, how are you?' },
         { name: 'Usuario 2', text: 'Hola, ¿cómo estás?' },
@@ -338,7 +346,7 @@ export const MESSAGES: Record<AppLang, AppMessages> = {
       logout: 'Log out',
     },
     home: {
-      badge: 'Conversa',
+      badge: 'conversa-io.chat',
       greeting: 'Hello, {name}',
       subtitle:
         'Create a new room or join with a code to start chatting with real-time translation.',
@@ -435,7 +443,7 @@ export const MESSAGES: Record<AppLang, AppMessages> = {
       pricingBadge: 'Plans',
       pricingTitle: 'Scale when you need to',
       pricingSubtitle:
-        'Start free. Pro from $9.99/mo USD. Room pass $2.99 USD.',
+        'Start free. Pro includes a 7-day trial — then $9.99/mo USD. Room pass $2.99 USD.',
       plans: {
         free: {
           name: 'Free',
@@ -450,8 +458,9 @@ export const MESSAGES: Record<AppLang, AppMessages> = {
         },
         pro: {
           name: 'Pro',
-          cta: 'Subscribe to Pro',
+          cta: 'Try 7 days free',
           features: [
+            '7-day free trial',
             'All languages',
             'Voice messages with translation',
             'Up to 10 participants',
@@ -477,7 +486,11 @@ export const MESSAGES: Record<AppLang, AppMessages> = {
         perMonth: 'per month',
         oneTime: 'one-time',
         usd: 'USD',
+        proTrialBadge: '7-day free trial',
+        proTrialSubtext: 'Then $9.99/mo USD · cancel anytime',
       },
+      proTrialCallout:
+        'Pro includes a 7-day free trial. You won’t be charged until the trial ends (if eligible).',
       demoUsers: [
         { name: 'User 1', text: 'Hello, how are you?' },
         { name: 'User 2', text: 'Hola, ¿cómo estás?' },

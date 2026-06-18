@@ -16,7 +16,7 @@ import {
   uiSelect,
 } from '@/components/ui/ui-classes';
 import { createConversation } from '@/lib/model/conversations.repository';
-import { assertCanCreateConversationClient, fetchFreeCreateEligibility } from '@/lib/billing/conversation-create-client';
+import { fetchFreeCreateEligibility } from '@/lib/billing/conversation-create-client';
 import { getCreateLanguageOptions } from '@/lib/billing/language-access';
 import { shouldShowFreePlanLimitsHint } from '@/lib/billing/show-free-plan-hint';
 import { usePlan } from '@/lib/billing/PlanProvider';
@@ -100,8 +100,10 @@ export default function CreateConversationPage() {
     const deviceId = getOrCreateCustomerIdentifier();
     void fetchFreeCreateEligibility(deviceId)
       .then((usage) => {
-        if (cancelled || usage.unlimited) {
+        if (cancelled) return;
+        if (usage.unlimited) {
           setCanCreate(true);
+          setDailyHint(null);
           return;
         }
         setCanCreate(usage.canCreate);
@@ -109,15 +111,25 @@ export default function CreateConversationPage() {
           setDailyHint(usage.message);
           return;
         }
+        const guestNote = !isAuthenticated
+          ? ' Sin cuenta: el límite se aplica a este navegador. '
+          : ' ';
         setDailyHint(
-          `Plan Free: te quedan ${usage.remaining} de ${usage.limit} conversaciones en las próximas 24 h (desde tu primera charla del período).`
+          `Plan Free:${guestNote}Te quedan ${usage.remaining} de ${usage.limit} conversaciones en las próximas 24 h (desde tu primera charla del período).`
         );
       })
-      .catch(() => undefined);
+      .catch(() => {
+        if (!cancelled) {
+          setCanCreate(false);
+          setDailyHint(
+            'No se pudo verificar tu límite diario. Recarga la página e inténtalo de nuevo.'
+          );
+        }
+      });
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [isAuthenticated]);
 
   const handleCreate = async (e: FormEvent) => {
     e.preventDefault();
@@ -130,7 +142,12 @@ export default function CreateConversationPage() {
     setError(null);
     try {
       const deviceId = getOrCreateCustomerIdentifier();
-      await assertCanCreateConversationClient(deviceId);
+      if (!deviceId) {
+        setError(
+          'No se pudo identificar tu dispositivo. Activa el almacenamiento local del navegador.'
+        );
+        return;
+      }
       const result = await createConversation({
         display_name: displayName.trim() || null,
         preferred_language: normalizeLanguageCode(language),

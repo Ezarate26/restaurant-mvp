@@ -9,6 +9,7 @@ import {
   uiModalText,
   uiModalTitle,
 } from '@/components/ui/ui-classes';
+import { PRO_TRIAL_DAYS } from '@/lib/billing/constants';
 
 type UpgradeInviteModalProps = {
   open: boolean;
@@ -30,7 +31,8 @@ export function UpgradeInviteModal({
         <p className={uiModalText}>
           Tu cuenta quedó en plan <strong>Free</strong>. Puedes crear salas y chatear
           con texto en español e inglés. ¿Quieres desbloquear voz, todos los idiomas
-          y salas más largas con <strong>Pro</strong> ($9.99/mes USD)?
+          y salas más largas con <strong>Pro</strong>? Incluye{' '}
+          <strong>{PRO_TRIAL_DAYS} días de prueba gratis</strong> — luego $9.99/mes USD.
         </p>
         <ul className="mt-4 space-y-2 text-sm text-[var(--app-muted)]">
           <li>· Voz con traducción en tiempo real</li>

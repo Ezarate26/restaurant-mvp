@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, type UIEvent } from 'react';
+import { useCallback, useEffect, useState, type UIEvent } from 'react';
 import type { ConversationMember, Message } from '@/lib/model/types';
 import { BillingStatusBadge } from '@/components/billing/BillingStatusBadge';
 import { RoomFreeSessionEndedGuestModal } from '@/components/billing/RoomFreeSessionEndedGuestModal';
@@ -22,7 +22,7 @@ import { usePlan } from '@/lib/billing/PlanProvider';
 import { useConversationRoomLimits } from '@/lib/billing/useConversationRoomLimits';
 import { markPendingRoomPassExtension } from '@/lib/billing/room-session.storage';
 import { useRoomSessionEnforcement } from '@/lib/billing/useRoomSessionEnforcement';
-import { useCallback, useEffect } from 'react';
+import { resolveJoinShareUrl } from '@/lib/brand/site-url';
 
 export interface ConversationChatViewProps {
   conversationId: string;
@@ -73,6 +73,7 @@ export interface ConversationChatViewProps {
   conversationStatus?: string | null;
   closedByMemberId?: string | null;
   onExtendSession?: (extraMs: number) => void | Promise<void>;
+  showAnonymousProInvite?: boolean;
 }
 
 export function ConversationChatView({
@@ -124,6 +125,7 @@ export function ConversationChatView({
   conversationStatus = 'active',
   closedByMemberId = null,
   onExtendSession,
+  showAnonymousProInvite = false,
 }: ConversationChatViewProps) {
   const [leaveModalOpen, setLeaveModalOpen] = useState(false);
   const [closeModalOpen, setCloseModalOpen] = useState(false);
@@ -218,24 +220,45 @@ export function ConversationChatView({
     closedByMemberId !== currentMemberId &&
     !freeGuestEndedOpen;
 
+  const isAnonymous = !plan.isAuthenticated;
+
+  const anonymousExitModalOpen =
+    isAnonymous &&
+    (freeOwnerUpgradeOpen ||
+      freeGuestEndedOpen ||
+      showAnonymousProInvite ||
+      showGuestClosedModal);
+
+  const anonymousExitVariant: 'free-time-expired' | 'chat-ended' =
+    freeOwnerUpgradeOpen || freeGuestEndedOpen
+      ? 'free-time-expired'
+      : 'chat-ended';
+
+  const proUpsellModalOpen =
+    upgradeOpen ||
+    anonymousExitModalOpen ||
+    (freeOwnerUpgradeOpen && plan.isAuthenticated);
+
+  const proUpsellVariant: 'voice' | 'free-time-expired' | 'chat-ended' =
+    anonymousExitModalOpen
+      ? anonymousExitVariant
+      : freeOwnerUpgradeOpen
+        ? 'free-time-expired'
+        : 'voice';
+
+  const handleAnonymousExitDismiss = useCallback(() => {
+    const endedByTime = freeOwnerUpgradeOpen || freeGuestEndedOpen;
+    void onGoHome?.(endedByTime);
+  }, [freeOwnerUpgradeOpen, freeGuestEndedOpen, onGoHome]);
+
   useEffect(() => {
     if (roomSession.roomTimeBlocked && isRecordingVoice && onCancelVoice) {
       onCancelVoice();
     }
   }, [roomSession.roomTimeBlocked, isRecordingVoice, onCancelVoice]);
 
-  useEffect(() => {
-    if (!freeGuestEndedOpen || !onGoHome) return;
-    const timer = window.setTimeout(() => void onGoHome(true), 2500);
-    return () => window.clearTimeout(timer);
-  }, [freeGuestEndedOpen, onGoHome]);
-
   const handleShare = async () => {
-    const url =
-      shareUrl ??
-      (inviteCode && typeof window !== 'undefined'
-        ? `${window.location.origin}/join/${inviteCode}`
-        : null);
+    const url = resolveJoinShareUrl(inviteCode, shareUrl);
     if (!url) {
       setInviteOpen(true);
       return;
@@ -484,13 +507,13 @@ export function ConversationChatView({
       />
 
       <RoomFreeSessionEndedGuestModal
-        open={freeGuestEndedOpen}
+        open={freeGuestEndedOpen && !isAnonymous}
         ownerDisplayName={ownerDisplayName}
         onGoHome={() => void onGoHome?.(true)}
       />
 
       <RoomGuestClosedModal
-        open={showGuestClosedModal}
+        open={showGuestClosedModal && !isAnonymous}
         closerDisplayName={closerDisplayName}
         isAuthenticated={plan.isAuthenticated}
         onUpgrade={() => setUpgradeOpen(true)}
@@ -498,9 +521,13 @@ export function ConversationChatView({
       />
 
       <UpgradeModal
-        open={upgradeOpen || freeOwnerUpgradeOpen}
-        variant={freeOwnerUpgradeOpen ? 'free-time-expired' : 'voice'}
+        open={proUpsellModalOpen}
+        variant={proUpsellVariant}
         onClose={() => {
+          if (anonymousExitModalOpen) {
+            handleAnonymousExitDismiss();
+            return;
+          }
           if (freeOwnerUpgradeOpen) {
             void onGoHome?.(true);
             return;

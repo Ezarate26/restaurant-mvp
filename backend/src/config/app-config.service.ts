@@ -1,6 +1,8 @@
 import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 
+const CONVERSA_SITE_URL = 'https://conversa-io.chat';
+
 /**
  * Acceso tipado a variables de entorno. Todas son privadas (solo servidor).
  * Las claves de Stripe son opcionales en arranque: se valida al usarlas
@@ -27,7 +29,9 @@ export class AppConfigService {
   }
 
   get corsOrigins(): string[] {
-    const raw = this.config.get<string>('CORS_ORIGIN') ?? 'http://localhost:3000';
+    const raw =
+      this.config.get<string>('CORS_ORIGIN') ??
+      `${CONVERSA_SITE_URL},http://localhost:3000`;
     return raw
       .split(',')
       .map((o) => o.trim())
@@ -35,7 +39,7 @@ export class AppConfigService {
   }
 
   get appUrlBase(): string {
-    return (this.config.get<string>('APP_URL') ?? 'http://localhost:3000').replace(
+    return (this.config.get<string>('APP_URL') ?? CONVERSA_SITE_URL).replace(
       /\/$/,
       ''
     );

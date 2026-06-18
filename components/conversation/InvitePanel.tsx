@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { resolveJoinShareUrl } from '@/lib/brand/site-url';
 import { ActivitySpinner } from '@/components/ui/ActivitySpinner';
 import { ModalFrame } from '@/components/ui/ModalFrame';
 import {
@@ -30,13 +31,10 @@ export function InvitePanel({
   const [qrLoading, setQrLoading] = useState(true);
   const [qrError, setQrError] = useState(false);
 
-  const qrSrc = inviteCode
-    ? `https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(
-        shareUrl ??
-          (typeof window !== 'undefined'
-            ? `${window.location.origin}/join/${inviteCode}`
-            : `/join/${inviteCode}`)
-      )}`
+  const resolvedShareUrl = resolveJoinShareUrl(inviteCode, shareUrl);
+
+  const qrSrc = resolvedShareUrl
+    ? `https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(resolvedShareUrl)}`
     : null;
 
   useEffect(() => {
@@ -48,11 +46,7 @@ export function InvitePanel({
   }, [open, qrSrc]);
 
   const handleCopy = async () => {
-    const url =
-      shareUrl ??
-      (inviteCode && typeof window !== 'undefined'
-        ? `${window.location.origin}/join/${inviteCode}`
-        : null);
+    const url = resolvedShareUrl;
     if (!url) return;
     try {
       await navigator.clipboard.writeText(url);
