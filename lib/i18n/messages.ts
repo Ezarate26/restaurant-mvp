@@ -310,7 +310,7 @@ export const MESSAGES: Record<AppLang, AppMessages> = {
         proTrialSubtext: 'Luego $9.99/mes USD · cancela cuando quieras',
       },
       proTrialCallout:
-        'El plan Pro incluye 7 días de prueba gratis. No se te cobrará hasta que termine el periodo de prueba (si eres elegible).',
+        'El plan Pro incluye 7 días de prueba gratis. No se te cobrará hasta que termine el periodo de prueba.',
       demoUsers: [
         { name: 'Usuario 1', text: 'Hello, how are you?' },
         { name: 'Usuario 2', text: 'Hola, ¿cómo estás?' },
