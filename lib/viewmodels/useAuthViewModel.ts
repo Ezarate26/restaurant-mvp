@@ -111,6 +111,12 @@ export function useAuthViewModel(initialIsLogin = true) {
       return;
     }
 
+    const nameTrimmed = fullName.trim();
+    if (!nameTrimmed) {
+      setFormError('Ingresa tu nombre completo.');
+      return;
+    }
+
     const phoneNormalized = normalizePhoneNumber(phone);
     if (!phoneNormalized) {
       setFormError('Ingresa tu número telefónico.');
@@ -126,7 +132,7 @@ export function useAuthViewModel(initialIsLogin = true) {
       password,
       options: {
         data: {
-          full_name: fullName.trim() || null,
+          full_name: nameTrimmed,
           phone: phoneNormalized,
         },
       },
