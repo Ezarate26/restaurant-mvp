@@ -117,6 +117,19 @@ export type AppMessages = {
     pricingBadge: string;
     pricingTitle: string;
     pricingSubtitle: string;
+    plans: {
+      free: { name: string; cta: string; features: string[] };
+      pro: { name: string; cta: string; features: string[] };
+      room_pass: { name: string; cta: string; features: string[] };
+    };
+    planCard: {
+      recommended: string;
+      currentPlan: string;
+      processing: string;
+      perMonth: string;
+      oneTime: string;
+      usd: string;
+    };
     demoUsers: [{ name: string; text: string }, { name: string; text: string }, { name: string; text: string }];
   };
 };
@@ -248,6 +261,48 @@ export const MESSAGES: Record<AppLang, AppMessages> = {
       pricingTitle: 'Escala cuando lo necesites',
       pricingSubtitle:
         'Empieza gratis. Pro desde $9.99/mes USD. Pase por sala $2.99 USD.',
+      plans: {
+        free: {
+          name: 'Free',
+          cta: 'Probar gratis',
+          features: [
+            'Solo mensajes de texto',
+            'Español ↔ Inglés',
+            'Hasta 2 participantes por sala',
+            'Sala activa 10 minutos',
+            'Hasta 5 conversaciones nuevas cada 24 h',
+          ],
+        },
+        pro: {
+          name: 'Pro',
+          cta: 'Suscribirse a Pro',
+          features: [
+            'Todos los idiomas',
+            'Mensajes de voz con traducción',
+            'Hasta 10 participantes',
+            'Sala activa 60 minutos',
+            'Facturación recurrente mensual',
+          ],
+        },
+        room_pass: {
+          name: 'Pase por sala',
+          cta: 'Comprar pase',
+          features: [
+            'Características Pro por 60 min',
+            'Pago único por sala',
+            'Ideal para reuniones puntuales',
+            'Sin suscripción',
+          ],
+        },
+      },
+      planCard: {
+        recommended: 'Recomendado',
+        currentPlan: 'Plan actual',
+        processing: 'Procesando…',
+        perMonth: 'por mes',
+        oneTime: 'pago único',
+        usd: 'USD',
+      },
       demoUsers: [
         { name: 'Usuario 1', text: 'Hello, how are you?' },
         { name: 'Usuario 2', text: 'Hola, ¿cómo estás?' },
@@ -381,6 +436,48 @@ export const MESSAGES: Record<AppLang, AppMessages> = {
       pricingTitle: 'Scale when you need to',
       pricingSubtitle:
         'Start free. Pro from $9.99/mo USD. Room pass $2.99 USD.',
+      plans: {
+        free: {
+          name: 'Free',
+          cta: 'Try for free',
+          features: [
+            'Text messages only',
+            'Spanish ↔ English',
+            'Up to 2 participants per room',
+            '10-minute active room',
+            'Up to 5 new conversations every 24 h',
+          ],
+        },
+        pro: {
+          name: 'Pro',
+          cta: 'Subscribe to Pro',
+          features: [
+            'All languages',
+            'Voice messages with translation',
+            'Up to 10 participants',
+            '60-minute active room',
+            'Monthly recurring billing',
+          ],
+        },
+        room_pass: {
+          name: 'Room pass',
+          cta: 'Buy room pass',
+          features: [
+            'Pro features for 60 min',
+            'One-time payment per room',
+            'Ideal for one-off meetings',
+            'No subscription',
+          ],
+        },
+      },
+      planCard: {
+        recommended: 'Recommended',
+        currentPlan: 'Current plan',
+        processing: 'Processing…',
+        perMonth: 'per month',
+        oneTime: 'one-time',
+        usd: 'USD',
+      },
       demoUsers: [
         { name: 'User 1', text: 'Hello, how are you?' },
         { name: 'User 2', text: 'Hola, ¿cómo estás?' },

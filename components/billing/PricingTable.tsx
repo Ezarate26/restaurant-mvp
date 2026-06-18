@@ -1,11 +1,14 @@
 'use client';
 
 import Link from 'next/link';
-import { useState } from 'react';
-import { PLAN_DEFINITIONS } from '@/lib/billing/constants';
+import { useMemo, useState } from 'react';
 import type { LandingLang } from '@/lib/i18n/landing';
 import { LANDING_COPY } from '@/lib/i18n/landing';
 import type { PlanDefinition } from '@/lib/billing/types';
+import {
+  getLocalizedPlanDefinitions,
+  getPlanCardCopy,
+} from '@/lib/billing/localized-plan-definitions';
 import { PlanCard } from '@/components/billing/PlanCard';
 import {
   isStripePricingTableConfigured,
@@ -34,6 +37,8 @@ export function PricingTable({
   const [busyId, setBusyId] = useState<string | null>(null);
   const stripeEmbed = isStripePricingTableConfigured();
   const landingPricing = LANDING_COPY[locale];
+  const plans = useMemo(() => getLocalizedPlanDefinitions(locale), [locale]);
+  const planCardCopy = useMemo(() => getPlanCardCopy(locale), [locale]);
 
   const handleSelect = async (planId: PlanDefinition['id']) => {
     setBusyId(planId);
@@ -84,25 +89,27 @@ export function PricingTable({
         </div>
       ) : variant === 'billing' ? (
         <div className="grid gap-5 md:grid-cols-3">
-          {PLAN_DEFINITIONS.map((plan) => (
+          {plans.map((plan) => (
             <PlanCard
               key={plan.id}
               plan={plan}
               currentPlanId={currentPlanId}
               busy={busyId === plan.id}
               onSelect={handleSelect}
+              cardCopy={planCardCopy}
             />
           ))}
         </div>
       ) : (
         <div className="grid gap-5 md:grid-cols-3">
-          {PLAN_DEFINITIONS.map((plan) => (
+          {plans.map((plan) => (
             <PlanCard
               key={plan.id}
               plan={plan}
               currentPlanId={currentPlanId}
               busy={busyId === plan.id}
               onSelect={handleSelect}
+              cardCopy={planCardCopy}
             />
           ))}
         </div>
