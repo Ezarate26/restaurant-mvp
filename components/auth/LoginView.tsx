@@ -90,12 +90,17 @@ export function LoginView({
         <div className="space-y-4">
           {!isLogin && (
             <div>
-              <label className={uiLabel}>Nombre completo</label>
+              <label className={uiLabel} htmlFor="auth-full-name">
+                Nombre completo
+              </label>
               <input
+                id="auth-full-name"
                 className={uiInput}
-                placeholder="Opcional"
+                placeholder="Tu nombre y apellido"
                 value={fullName}
                 onChange={(e) => onFullNameChange(e.target.value)}
+                autoComplete="name"
+                required
               />
             </div>
           )}
