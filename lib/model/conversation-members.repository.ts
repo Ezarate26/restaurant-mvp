@@ -8,6 +8,7 @@ import {
   setConversationOwner,
 } from './conversations-table.repository';
 import { createConversationInvite } from './conversation-invites.repository';
+import { assertCanJoinConversation } from '@/lib/conversations/active-session.server';
 
 export async function insertConversationMember(
   client: SupabaseClient,
@@ -248,12 +249,12 @@ export async function joinConversationAsMember(
     throw new Error('La conversación no está activa');
   }
 
-  const existing = await findActiveMemberByDevice(
-    client,
-    args.conversationId,
-    args.deviceId
-  );
-  if (existing) return existing;
+  const existingByPolicy = await assertCanJoinConversation(client, {
+    conversationId: args.conversationId,
+    userId: args.userId,
+    deviceId: args.deviceId,
+  });
+  if (existingByPolicy) return existingByPolicy;
 
   return insertConversationMember(client, {
     conversationId: args.conversationId,

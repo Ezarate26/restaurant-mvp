@@ -402,6 +402,11 @@ export function ConversationChatView({
               recordingLabel={recordingLabel}
               closureBanner={closureBanner}
               onMessagesScroll={onMessagesScroll}
+              isOwner={isOwner}
+              inviteCode={inviteCode}
+              onOpenInvite={() => setInviteOpen(true)}
+              onShareInvite={() => void handleShare()}
+              composerDisabled={effectiveComposerDisabled}
             />
 
             <ChatComposer

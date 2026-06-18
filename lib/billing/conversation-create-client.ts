@@ -9,12 +9,51 @@ export type CreateConversationResponse = {
   member: ConversationMember;
 };
 
+export type ActiveSessionPayload = {
+  conversationId: string;
+  memberId: string;
+  inviteCode: string;
+  isOwner: boolean;
+  deviceId: string | null;
+};
+
+export type ActiveSessionApiResponse = {
+  active: boolean;
+  conversationId?: string;
+  memberId?: string;
+  inviteCode?: string;
+  isOwner?: boolean;
+  deviceId?: string | null;
+  sameDevice?: boolean;
+};
+
 type CanCreateResponse = FreeCreateEligibility & {
   allowed?: boolean;
   error?: string;
 };
 
-type CreateApiResponse = CreateConversationResponse & { error?: string };
+type CreateApiResponse = CreateConversationResponse & {
+  error?: string;
+  code?: string;
+  activeSession?: ActiveSessionPayload;
+};
+
+type JoinApiResponse = CreateConversationResponse & {
+  error?: string;
+  code?: string;
+  activeSession?: ActiveSessionPayload;
+};
+
+export class ActiveSessionConflictClientError extends Error {
+  readonly code = 'ACTIVE_SESSION_EXISTS' as const;
+  readonly activeSession: ActiveSessionPayload;
+
+  constructor(message: string, activeSession: ActiveSessionPayload) {
+    super(message);
+    this.name = 'ActiveSessionConflictClientError';
+    this.activeSession = activeSession;
+  }
+}
 
 async function authHeaders(): Promise<HeadersInit> {
   const { data } = await supabase.auth.getSession();
@@ -41,6 +80,12 @@ export async function createConversationViaApi(args: {
 
   const data = (await res.json()) as CreateApiResponse;
   if (!res.ok) {
+    if (res.status === 409 && data.code === 'ACTIVE_SESSION_EXISTS' && data.activeSession) {
+      throw new ActiveSessionConflictClientError(
+        data.error ?? 'Ya tienes una sesión de chat activa',
+        data.activeSession
+      );
+    }
     throw new Error(data.error ?? 'No se pudo crear la conversación');
   }
 
@@ -89,4 +134,55 @@ export async function assertCanCreateConversationClient(
         'No puedes crear más conversaciones en este período de 24 horas'
     );
   }
+}
+
+export async function joinConversationViaApi(args: {
+  invite_code: string;
+  device_id: string;
+  display_name: string | null;
+  preferred_language: string;
+}): Promise<CreateConversationResponse> {
+  const res = await fetch('/api/conversations/join', {
+    method: 'POST',
+    headers: await authHeaders(),
+    body: JSON.stringify({
+      inviteCode: args.invite_code,
+      deviceId: args.device_id,
+      displayName: args.display_name,
+      preferredLanguage: args.preferred_language,
+    }),
+  });
+
+  const data = (await res.json()) as JoinApiResponse;
+  if (!res.ok) {
+    if (res.status === 409 && data.code === 'ACTIVE_SESSION_EXISTS' && data.activeSession) {
+      throw new ActiveSessionConflictClientError(
+        data.error ?? 'Ya tienes una sesión de chat activa',
+        data.activeSession
+      );
+    }
+    throw new Error(data.error ?? 'No se pudo unir a la conversación');
+  }
+
+  return {
+    conversation_id: data.conversation_id,
+    member_id: data.member_id,
+    invite_code: data.invite_code,
+    member: data.member,
+  };
+}
+
+export async function fetchServerActiveSession(
+  deviceId: string
+): Promise<ActiveSessionApiResponse> {
+  const qs = new URLSearchParams({ deviceId });
+  const res = await fetch(`/api/conversations/active-session?${qs.toString()}`, {
+    headers: await authHeaders(),
+    cache: 'no-store',
+  });
+  const data = (await res.json()) as ActiveSessionApiResponse & { error?: string };
+  if (!res.ok) {
+    throw new Error(data.error ?? 'No se pudo consultar la sesión activa');
+  }
+  return data;
 }
