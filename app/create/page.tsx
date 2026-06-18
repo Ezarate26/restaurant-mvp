@@ -16,7 +16,12 @@ import {
   uiSelect,
 } from '@/components/ui/ui-classes';
 import { createConversation } from '@/lib/model/conversations.repository';
-import { fetchFreeCreateEligibility } from '@/lib/billing/conversation-create-client';
+import {
+  ActiveSessionConflictClientError,
+  fetchFreeCreateEligibility,
+  fetchServerActiveSession,
+} from '@/lib/billing/conversation-create-client';
+import { ActiveSessionBlockedNotice } from '@/components/conversation/ActiveSessionBlockedNotice';
 import { getCreateLanguageOptions } from '@/lib/billing/language-access';
 import { shouldShowFreePlanLimitsHint } from '@/lib/billing/show-free-plan-hint';
 import { usePlan } from '@/lib/billing/PlanProvider';
@@ -43,6 +48,9 @@ export default function CreateConversationPage() {
   const [error, setError] = useState<string | null>(null);
   const [dailyHint, setDailyHint] = useState<string | null>(null);
   const [canCreate, setCanCreate] = useState(true);
+  const [remoteActiveBlock, setRemoteActiveBlock] = useState<{
+    inviteCode: string;
+  } | null>(null);
   const prefilledNameRef = useRef(false);
   const languageOptions = useMemo(
     () => getCreateLanguageOptions(tier === 'pro'),
@@ -57,11 +65,35 @@ export default function CreateConversationPage() {
   useEffect(() => {
     let cancelled = false;
     void (async () => {
+      const deviceId = getOrCreateCustomerIdentifier();
       const active = await resolveActiveConversationSession(supabase);
-      if (cancelled || !active) return;
-      router.replace(
-        `/c/${active.conversationId}?member=${encodeURIComponent(active.memberId)}${active.lang ? `&lang=${encodeURIComponent(active.lang)}` : ''}`
-      );
+      if (cancelled) return;
+      if (active) {
+        router.replace(
+          `/c/${active.conversationId}?member=${encodeURIComponent(active.memberId)}${active.lang ? `&lang=${encodeURIComponent(active.lang)}` : ''}`
+        );
+        return;
+      }
+
+      try {
+        const server = await fetchServerActiveSession(deviceId);
+        if (cancelled || !server.active) return;
+        if (
+          server.sameDevice &&
+          server.conversationId &&
+          server.memberId
+        ) {
+          router.replace(
+            `/c/${server.conversationId}?member=${encodeURIComponent(server.memberId)}`
+          );
+          return;
+        }
+        if (server.inviteCode) {
+          setRemoteActiveBlock({ inviteCode: server.inviteCode });
+        }
+      } catch (e) {
+        console.error('CreateConversationPage:activeSession', e);
+      }
     })();
     return () => {
       cancelled = true;
@@ -159,6 +191,11 @@ export default function CreateConversationPage() {
       );
     } catch (err) {
       console.error('createConversation', err);
+      if (err instanceof ActiveSessionConflictClientError) {
+        setRemoteActiveBlock({ inviteCode: err.activeSession.inviteCode });
+        setError(err.message);
+        return;
+      }
       setError(getErrorMessage(err, 'iniciar la conversación'));
     } finally {
       setBusy(false);
@@ -168,6 +205,7 @@ export default function CreateConversationPage() {
   const trimmedName = displayName.trim();
   const showNameHint = isAuthenticated && trimmedName.length > 0;
   const showFreeHint = shouldShowFreePlanLimitsHint({ userTier: tier });
+  const blockedByRemoteSession = remoteActiveBlock != null;
 
   return (
     <AppShell>
@@ -180,7 +218,14 @@ export default function CreateConversationPage() {
           {t.create.subtitle}
         </p>
 
-        {showFreeHint ? (
+        {blockedByRemoteSession ? (
+          <ActiveSessionBlockedNotice
+            inviteCode={remoteActiveBlock.inviteCode}
+            className="mt-4"
+          />
+        ) : null}
+
+        {showFreeHint && !blockedByRemoteSession ? (
           <FreePlanLimitsHint variant="create" className="mt-4" />
         ) : null}
 
@@ -232,7 +277,7 @@ export default function CreateConversationPage() {
           label={t.create.submit}
           busyLabel={t.create.submitBusy}
           busy={busy}
-          disabled={!canCreate}
+          disabled={!canCreate || blockedByRemoteSession}
           className={`${uiBtnPrimary} mt-6 w-full`}
         />
 

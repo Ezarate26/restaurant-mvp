@@ -94,6 +94,15 @@ export type AppMessages = {
     backHome: string;
     errorDefault: string;
   };
+  activeSession: {
+    blockedTitle: string;
+    blockedBody: string;
+    activeCode: string;
+  };
+  chat: {
+    soloOwnerTitle: string;
+    soloOwnerHint: string;
+  };
   landing: {
     tagline: string;
     badge: string;
@@ -233,6 +242,17 @@ export const MESSAGES: Record<AppLang, AppMessages> = {
       submitBusy: 'Creando…',
       backHome: 'Volver al inicio',
       errorDefault: 'No se pudo crear la conversación',
+    },
+    activeSession: {
+      blockedTitle: 'Ya tienes una sesión de chat activa',
+      blockedBody:
+        'Sal de la conversación en tu otro dispositivo antes de iniciar o unirte a otra sala.',
+      activeCode: 'Código activo',
+    },
+    chat: {
+      soloOwnerTitle: 'Invita a alguien para empezar',
+      soloOwnerHint:
+        'Comparte el enlace o muestra el código QR para que se unan a esta conversación.',
     },
     landing: {
       tagline: 'IA · Traducción en tiempo real',
@@ -413,6 +433,17 @@ export const MESSAGES: Record<AppLang, AppMessages> = {
       submitBusy: 'Creating…',
       backHome: 'Back to home',
       errorDefault: 'Could not create the conversation',
+    },
+    activeSession: {
+      blockedTitle: 'You already have an active chat session',
+      blockedBody:
+        'Leave the conversation on your other device before starting or joining another room.',
+      activeCode: 'Active code',
+    },
+    chat: {
+      soloOwnerTitle: 'Invite someone to get started',
+      soloOwnerHint:
+        'Share the link or show the QR code so others can join this conversation.',
     },
     landing: {
       tagline: 'AI · Real-time translation',

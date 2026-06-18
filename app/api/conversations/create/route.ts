@@ -3,6 +3,10 @@ import { ensurePublicUserById } from '@/lib/auth/ensure-public-user';
 import { assertCanCreateFreeConversation } from '@/lib/billing/free-daily-limit.server';
 import { resolveCreatorAllowAllLanguagesServer } from '@/lib/billing/creator-language-access.server';
 import {
+  ActiveSessionConflictError,
+  assertNoActiveSessionElsewhere,
+} from '@/lib/conversations/active-session.server';
+import {
   assertLanguageAllowed,
   clampLanguageToFree,
 } from '@/lib/billing/language-access';
@@ -48,6 +52,8 @@ export async function POST(request: Request) {
   try {
     await assertCanCreateFreeConversation(service, { userId, deviceId });
 
+    await assertNoActiveSessionElsewhere(service, { userId, deviceId });
+
     let ownerUserId: string | null = userId;
     if (ownerUserId) {
       await ensurePublicUserById(service, ownerUserId);
@@ -76,6 +82,16 @@ export async function POST(request: Request) {
       member: result.member,
     });
   } catch (e) {
+    if (e instanceof ActiveSessionConflictError) {
+      return NextResponse.json(
+        {
+          error: e.message,
+          code: e.code,
+          activeSession: e.session,
+        },
+        { status: 409 }
+      );
+    }
     const message =
       e instanceof Error ? e.message : 'No se pudo crear la conversación';
     const status =

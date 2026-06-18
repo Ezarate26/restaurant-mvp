@@ -4,6 +4,7 @@ import { useEffect, useRef, useState, type UIEvent } from 'react';
 import { MessageBubble } from '@/components/chat/MessageBubble';
 import { ChatActivityIndicator } from '@/components/chat/ChatActivityIndicator';
 import { SystemMessageCard } from '@/components/chat/SystemMessageCard';
+import { SoloOwnerInvitePrompt } from '@/components/chat/SoloOwnerInvitePrompt';
 import type { ConversationMember, Message } from '@/lib/model/types';
 
 type ActivityEvent = {
@@ -21,6 +22,11 @@ type ChatMessagesPaneProps = {
   recordingLabel?: string | null;
   closureBanner?: string | null;
   onMessagesScroll?: (e: UIEvent<HTMLDivElement>) => void;
+  isOwner?: boolean;
+  inviteCode?: string | null;
+  onOpenInvite?: () => void;
+  onShareInvite?: () => void;
+  composerDisabled?: boolean;
 };
 
 function useMemberActivityEvents(members: ConversationMember[]): ActivityEvent[] {
@@ -78,13 +84,26 @@ export function ChatMessagesPane({
   recordingLabel = null,
   closureBanner = null,
   onMessagesScroll,
+  isOwner = false,
+  inviteCode = null,
+  onOpenInvite,
+  onShareInvite,
+  composerDisabled = false,
 }: ChatMessagesPaneProps) {
   const messageEndRef = useRef<HTMLDivElement | null>(null);
   const activityEvents = useMemberActivityEvents(members);
+  const activeCount = members.filter((m) => !m.left_at).length;
+  const showSoloOwnerInvite =
+    isOwner &&
+    activeCount <= 1 &&
+    messages.length === 0 &&
+    activityEvents.length === 0 &&
+    Boolean(onOpenInvite || onShareInvite);
 
   useEffect(() => {
+    if (showSoloOwnerInvite) return;
     messageEndRef.current?.scrollIntoView({ block: 'end', behavior: 'smooth' });
-  }, [messages, typingLabel, recordingLabel, activityEvents.length]);
+  }, [messages, typingLabel, recordingLabel, activityEvents.length, showSoloOwnerInvite]);
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
@@ -92,12 +111,19 @@ export function ChatMessagesPane({
         className="chat-pane-bg app-scrollbar flex min-h-0 flex-1 flex-col overflow-y-auto py-3"
         onScroll={onMessagesScroll}
       >
-        {messages.length === 0 && activityEvents.length === 0 && (
+        {showSoloOwnerInvite ? (
+          <SoloOwnerInvitePrompt
+            inviteCode={inviteCode}
+            onOpenQr={onOpenInvite}
+            onShare={onShareInvite}
+            composerDisabled={composerDisabled}
+          />
+        ) : messages.length === 0 && activityEvents.length === 0 ? (
           <p className="py-16 text-center text-sm text-[var(--app-muted)]">
             Aún no hay mensajes. Escribe o graba un audio para iniciar la
             conversación.
           </p>
-        )}
+        ) : null}
 
         {activityEvents.map((ev) => (
           <SystemMessageCard key={ev.id}>{ev.text}</SystemMessageCard>

@@ -15,6 +15,8 @@ import {
   uiSelect,
 } from '@/components/ui/ui-classes';
 import { joinConversation } from '@/lib/model/conversations.repository';
+import { ActiveSessionConflictClientError } from '@/lib/billing/conversation-create-client';
+import { ActiveSessionBlockedNotice } from '@/components/conversation/ActiveSessionBlockedNotice';
 import {
   markAllMembersLeft,
   markMemberLeft,
@@ -56,6 +58,9 @@ export default function JoinConversationPage() {
   const [switchOpen, setSwitchOpen] = useState(false);
   const [pendingJoin, setPendingJoin] = useState(false);
   const [switchIsOwner, setSwitchIsOwner] = useState(false);
+  const [remoteActiveBlock, setRemoteActiveBlock] = useState<{
+    inviteCode: string;
+  } | null>(null);
 
   useEffect(() => {
     if (!inviteCode) return;
@@ -121,6 +126,11 @@ export default function JoinConversationPage() {
         `/c/${result.conversation_id}?member=${encodeURIComponent(result.member_id)}&lang=${encodeURIComponent(language)}`
       );
     } catch (e) {
+      if (e instanceof ActiveSessionConflictClientError) {
+        setRemoteActiveBlock({ inviteCode: e.activeSession.inviteCode });
+        setError(e.message);
+        return;
+      }
       setError(getErrorMessage(e, 'unirte a la conversación'));
     } finally {
       setBusy(false);
@@ -221,6 +231,13 @@ export default function JoinConversationPage() {
           ))}
         </select>
 
+        {remoteActiveBlock ? (
+          <ActiveSessionBlockedNotice
+            inviteCode={remoteActiveBlock.inviteCode}
+            className="mt-4"
+          />
+        ) : null}
+
         {roomFull ? (
           <p className="mt-4 text-sm text-[var(--app-error)]">
             {roomMaxParticipants <= 2
@@ -236,7 +253,7 @@ export default function JoinConversationPage() {
           label="Entrar a la conversación"
           busyLabel="Entrando…"
           busy={busy}
-          disabled={!inviteCode || roomFull}
+          disabled={!inviteCode || roomFull || remoteActiveBlock != null}
           className={`${uiBtnPrimary} mt-6 w-full`}
         />
       </form>
