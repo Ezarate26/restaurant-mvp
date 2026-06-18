@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { ensurePublicUserById } from '@/lib/auth/ensure-public-user';
+import { resolveJoinDisplayNameForUser } from '@/lib/auth/resolve-join-display-name.server';
 import { applyProJoinRoomBoost } from '@/lib/billing/apply-pro-join-room-boost';
 import {
   getOrCreateBillingRow,
@@ -45,7 +46,7 @@ export async function POST(request: Request) {
   const body = (await request.json().catch(() => ({}))) as JoinBody;
   const inviteCode = body.inviteCode?.trim().toUpperCase() || null;
   const deviceId = body.deviceId?.trim() || null;
-  const displayName = body.displayName?.trim() || null;
+  const bodyDisplayName = body.displayName?.trim() || null;
   const preferredLanguage = normalizeLanguageCode(
     body.preferredLanguage?.trim() || 'es'
   );
@@ -67,14 +68,15 @@ export async function POST(request: Request) {
     );
   }
 
-  if (!displayName) {
+  const userId = (await getUserIdFromRequest(request)) ?? null;
+
+  if (!userId && !bodyDisplayName) {
     return NextResponse.json(
       { error: 'Ingresa tu nombre visible para unirte a la conversación.' },
       { status: 400 }
     );
   }
 
-  const userId = (await getUserIdFromRequest(request)) ?? null;
   const service = createSupabaseServiceRole();
 
   try {
@@ -90,6 +92,10 @@ export async function POST(request: Request) {
     if (joinerUserId) {
       await ensurePublicUserById(service, joinerUserId);
     }
+
+    const displayName = joinerUserId
+      ? bodyDisplayName ?? (await resolveJoinDisplayNameForUser(service, joinerUserId))
+      : bodyDisplayName!;
 
     const limits = await getConversationRoomLimits(conversation.id);
     const activeMembers = await fetchActiveMembersByConversation(
