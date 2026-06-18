@@ -1,5 +1,8 @@
 import type { PlanDefinition } from '@/lib/billing/types';
+import type { AppMessages } from '@/lib/i18n/messages';
 import { uiBtnPrimary, uiBtnSecondary } from '@/components/ui/ui-classes';
+
+type PlanCardCopy = AppMessages['landing']['planCard'];
 
 type PlanCardProps = {
   plan: PlanDefinition;
@@ -8,7 +11,17 @@ type PlanCardProps = {
   disabled?: boolean;
   disabledReason?: string;
   ctaOverride?: string;
+  cardCopy?: PlanCardCopy;
   onSelect: (planId: PlanDefinition['id']) => void;
+};
+
+const DEFAULT_CARD_COPY: PlanCardCopy = {
+  recommended: 'Recomendado',
+  currentPlan: 'Plan actual',
+  processing: 'Procesando…',
+  perMonth: 'por mes',
+  oneTime: 'pago único',
+  usd: 'USD',
 };
 
 export function PlanCard({
@@ -18,6 +31,7 @@ export function PlanCard({
   disabled = false,
   disabledReason,
   ctaOverride,
+  cardCopy = DEFAULT_CARD_COPY,
   onSelect,
 }: PlanCardProps) {
   const isCurrent = currentPlanId === plan.id;
@@ -34,7 +48,7 @@ export function PlanCard({
     >
       {isHighlighted ? (
         <span className="absolute -top-3 left-1/2 -translate-x-1/2 rounded-full bg-[var(--app-primary)] px-3 py-0.5 text-[10px] font-bold uppercase tracking-wider text-white">
-          Recomendado
+          {cardCopy.recommended}
         </span>
       ) : null}
 
@@ -43,13 +57,17 @@ export function PlanCard({
         <p className="mt-2 text-3xl font-bold tracking-tight">{plan.priceLabel}</p>
         {plan.currency === 'usd' && plan.id !== 'free' ? (
           <p className="mt-1 text-xs text-[var(--app-muted)]">
-            USD
-            {plan.interval === 'monthly' ? ' · por mes' : plan.interval === 'one_time' ? ' · pago único' : ''}
+            {cardCopy.usd}
+            {plan.interval === 'monthly'
+              ? ` · ${cardCopy.perMonth}`
+              : plan.interval === 'one_time'
+                ? ` · ${cardCopy.oneTime}`
+                : ''}
           </p>
         ) : plan.interval === 'monthly' ? (
-          <p className="mt-1 text-xs text-[var(--app-muted)]">por mes</p>
+          <p className="mt-1 text-xs text-[var(--app-muted)]">{cardCopy.perMonth}</p>
         ) : plan.interval === 'one_time' ? (
-          <p className="mt-1 text-xs text-[var(--app-muted)]">pago único</p>
+          <p className="mt-1 text-xs text-[var(--app-muted)]">{cardCopy.oneTime}</p>
         ) : null}
       </div>
 
@@ -73,9 +91,9 @@ export function PlanCard({
         }
       >
         {isCurrent
-          ? 'Plan actual'
+          ? cardCopy.currentPlan
           : busy
-            ? 'Procesando…'
+            ? cardCopy.processing
             : ctaOverride ?? plan.cta}
       </button>
       {disabled && disabledReason ? (
