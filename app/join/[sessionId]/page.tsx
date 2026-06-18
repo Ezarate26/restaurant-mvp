@@ -17,6 +17,8 @@ import {
 import { joinConversation } from '@/lib/model/conversations.repository';
 import { ActiveSessionConflictClientError } from '@/lib/billing/conversation-create-client';
 import { ActiveSessionBlockedNotice } from '@/components/conversation/ActiveSessionBlockedNotice';
+import { fetchUserById } from '@/lib/model/profiles.repository';
+import { resolveAccountDisplayName } from '@/lib/utils/account-display-name';
 import {
   markAllMembersLeft,
   markMemberLeft,
@@ -42,7 +44,7 @@ import { getErrorMessage } from '@/lib/utils/supabase-errors';
 export default function JoinConversationPage() {
   const router = useRouter();
   const params = useParams();
-  const { isAuthenticated } = useSupabaseAuth();
+  const { user, isAuthenticated, isLoading: authLoading } = useSupabaseAuth();
   const { tier } = usePlan();
   const inviteCode = ((params.sessionId as string) ?? '').trim().toUpperCase();
   const [language, setLanguage] = useState('es');
@@ -53,6 +55,7 @@ export default function JoinConversationPage() {
   const [roomMaxParticipants, setRoomMaxParticipants] = useState(2);
   const [roomUiMode, setRoomUiMode] = useState<BillingUiMode | null>(null);
   const [displayName, setDisplayName] = useState('');
+  const [accountName, setAccountName] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [switchOpen, setSwitchOpen] = useState(false);
@@ -95,12 +98,37 @@ export default function JoinConversationPage() {
     };
   }, [inviteCode, isAuthenticated]);
 
+  useEffect(() => {
+    if (authLoading || !isAuthenticated || !user) {
+      setAccountName('');
+      return;
+    }
+
+    let cancelled = false;
+    void (async () => {
+      try {
+        const profile = await fetchUserById(supabase, user.id);
+        if (cancelled) return;
+        setAccountName(resolveAccountDisplayName(user, profile));
+      } catch (e) {
+        console.error('JoinConversationPage:accountName', e);
+        if (!cancelled) {
+          setAccountName(resolveAccountDisplayName(user, null));
+        }
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [authLoading, isAuthenticated, user]);
+
   const performJoin = async () => {
     if (!inviteCode) {
       setError('Código de invitación no válido');
       return;
     }
-    if (!displayName.trim()) {
+    if (!isAuthenticated && !displayName.trim()) {
       setError('Ingresa tu nombre visible para unirte a la conversación.');
       return;
     }
@@ -117,7 +145,7 @@ export default function JoinConversationPage() {
     try {
       const result = await joinConversation({
         invite_code: inviteCode,
-        display_name: displayName.trim() || null,
+        display_name: isAuthenticated ? null : displayName.trim() || null,
         preferred_language: normalizeLanguageCode(language),
         device_id: getOrCreateCustomerIdentifier(),
       });
@@ -203,19 +231,34 @@ export default function JoinConversationPage() {
           <FreePlanLimitsHint variant="join" className="mt-4" />
         ) : null}
 
-        <label className={`${uiLabel} mt-6`} htmlFor="display-name">
-          Nombre visible
-        </label>
-        <input
-          id="display-name"
-          type="text"
-          value={displayName}
-          onChange={(e) => setDisplayName(e.target.value)}
-          placeholder="Cómo te verán los demás"
-          className={uiInput}
-        />
+        {!isAuthenticated ? (
+          <>
+            <label className={`${uiLabel} mt-6`} htmlFor="display-name">
+              Nombre visible
+            </label>
+            <input
+              id="display-name"
+              type="text"
+              value={displayName}
+              onChange={(e) => setDisplayName(e.target.value)}
+              placeholder="Cómo te verán los demás"
+              className={uiInput}
+            />
+          </>
+        ) : accountName ? (
+          <p className="mt-6 text-sm text-[var(--app-muted)]">
+            Te unirás como{' '}
+            <span className="font-semibold text-[var(--app-text)]">
+              {accountName}
+            </span>
+            .
+          </p>
+        ) : null}
 
-        <label className={`${uiLabel} mt-4`} htmlFor="join-language">
+        <label
+          className={`${uiLabel} ${isAuthenticated ? 'mt-6' : 'mt-4'}`}
+          htmlFor="join-language"
+        >
           Idioma
         </label>
         <select

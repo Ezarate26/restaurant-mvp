@@ -45,16 +45,20 @@ export async function createConversation(
 export async function joinConversation(
   payload: JoinConversationPayload
 ): Promise<CreateConversationResponse> {
-  const displayName = payload.display_name?.trim() || null;
-  if (!displayName) {
-    throw new Error('Ingresa tu nombre visible para unirte a la conversación.');
-  }
-
   const deviceId = payload.device_id?.trim();
   if (!deviceId) {
     throw new Error(
       'No se pudo identificar tu dispositivo. Activa el almacenamiento local del navegador.'
     );
+  }
+
+  const displayName =
+    payload.display_name == null
+      ? null
+      : payload.display_name.trim() || null;
+
+  if (payload.display_name != null && !displayName) {
+    throw new Error('Ingresa tu nombre visible para unirte a la conversación.');
   }
 
   return joinConversationViaApi({
