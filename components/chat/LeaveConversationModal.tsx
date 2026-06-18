@@ -30,9 +30,9 @@ export function LeaveConversationModal({
 
   const description = isLeave
     ? ownerEndsForAll
-      ? 'Como propietario, al salir finalizarás la conversación para todos los participantes. Esta acción no se puede deshacer.'
-      : 'Vas a salir de esta conversación. Los demás participantes podrán seguir chateando.'
-    : 'Vas a finalizar la conversación para todos los participantes. Esta acción no se puede deshacer.';
+      ? 'Como propietario, al salir cerrarás la sala para todos. Los invitados serán expulsados y la conversación terminará. Esta acción no se puede deshacer.'
+      : 'Vas a salir de esta sala. Los demás participantes podrán seguir chateando. Si quieres volver, tendrás que unirte de nuevo con el código de invitación.'
+    : 'Vas a finalizar la conversación para todos los participantes. Los invitados serán expulsados. Esta acción no se puede deshacer.';
 
   return (
     <ModalFrame open={open} labelledBy="leave-chat-title" onClose={onCancel}>

@@ -177,7 +177,7 @@ export function BillingPlansSection({
           <strong className="text-[var(--app-success)]">
             {PRO_TRIAL_DAYS} días de prueba gratis
           </strong>
-          . No se te cobrará hasta que termine el periodo de prueba (si eres elegible).
+          . No se te cobrará hasta que termine el periodo de prueba.
         </p>
       ) : null}
       <div className="grid gap-5 md:grid-cols-3">

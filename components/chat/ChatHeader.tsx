@@ -97,7 +97,7 @@ export function ChatHeader({
           </span>
           {onOpenParticipants ? (
             <IconHitboxButton
-              className={`${uiIconBtn} hidden`}
+              className={`${uiIconBtn} md:hidden`}
               aria-label="Ver participantes"
               title="Participantes"
               onAction={() => onOpenParticipants()}

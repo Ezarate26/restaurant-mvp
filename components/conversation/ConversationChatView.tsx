@@ -136,6 +136,17 @@ export function ConversationChatView({
   const plan = usePlan();
 
   useEffect(() => {
+    if (!onParticipantsOpenChange) return;
+    const mq = window.matchMedia('(min-width: 768px)');
+    const closeOnDesktop = () => {
+      if (mq.matches) onParticipantsOpenChange(false);
+    };
+    closeOnDesktop();
+    mq.addEventListener('change', closeOnDesktop);
+    return () => mq.removeEventListener('change', closeOnDesktop);
+  }, [onParticipantsOpenChange]);
+
+  useEffect(() => {
     void plan.syncForConversation(conversationId);
   }, [conversationId, plan.syncForConversation]);
   const hasRoomPass = plan.hasActiveRoomPass(conversationId);
@@ -415,7 +426,7 @@ export function ConversationChatView({
             />
           </main>
 
-          <aside className="hidden w-[240px] shrink-0 flex-col border-l border-[var(--app-border)] bg-[var(--app-sidebar)] md:flex">
+          <aside className="hidden w-[240px] shrink-0 flex-col border-l border-[var(--app-border)] bg-[var(--app-sidebar)] md:flex md:max-w-[240px] md:min-w-[240px]">
             <div className="shrink-0 border-b border-[var(--app-border)] px-4 py-3">
               <h2 className="text-xs font-bold uppercase tracking-wide text-[var(--app-muted)]">
                 Participantes — {activeCount}

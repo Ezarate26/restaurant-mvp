@@ -1,9 +1,11 @@
 'use client';
 
 import { useRouter, useSearchParams } from 'next/navigation';
-import { use, useCallback, useEffect, useRef } from 'react';
+import { use, useCallback, useEffect, useRef, useState } from 'react';
 import { ConversationChatView } from '@/components/conversation/ConversationChatView';
+import { LeaveConversationModal } from '@/components/chat/LeaveConversationModal';
 import { useConversationChatViewModel } from '@/lib/viewmodels/useConversationChatViewModel';
+import { useChatBackExitGuard } from '@/lib/hooks/useChatBackExitGuard';
 import { AUTH_HOME_PATH } from '@/lib/constants/routes';
 import { clearActiveConversationSession } from '@/lib/utils/active-conversation-session';
 import { markSessionEndedByTime } from '@/lib/utils/session-ended-flash.storage';
@@ -50,6 +52,9 @@ function ConversationScreen({
 }) {
   const router = useRouter();
   const redirectingRef = useRef(false);
+  const [backExitOpen, setBackExitOpen] = useState(false);
+  const backExitOpenRef = useRef(false);
+  backExitOpenRef.current = backExitOpen;
   const vm = useConversationChatViewModel({
     conversationId,
     memberId,
@@ -118,6 +123,32 @@ function ConversationScreen({
   }, [vm, redirectAfterLeave]);
 
   const isAnonymousMember = Boolean(vm.member && !vm.member.user_id);
+
+  const chatSessionActive =
+    !vm.isLoading &&
+    vm.conversation?.status !== 'closed' &&
+    !vm.member?.left_at &&
+    !redirectingRef.current;
+
+  useChatBackExitGuard({
+    enabled: chatSessionActive,
+    onBackAttempt: () => {
+      if (!backExitOpenRef.current) setBackExitOpen(true);
+    },
+  });
+
+  const handleBackExitConfirm = useCallback(async () => {
+    const isAnonymous = !vm.member?.user_id;
+    try {
+      await vm.leaveConversation();
+      setBackExitOpen(false);
+      if (!isAnonymous) {
+        await redirectAfterLeave();
+      }
+    } catch {
+      setBackExitOpen(false);
+    }
+  }, [vm, redirectAfterLeave]);
 
   const sessionUnavailable =
     !vm.isLoading &&
@@ -223,6 +254,14 @@ function ConversationScreen({
           vm.showAnonymousProInvite ||
           (isAnonymousMember && sessionUnavailable)
         }
+      />
+      <LeaveConversationModal
+        open={backExitOpen}
+        busy={vm.leaveBusy}
+        mode="leave"
+        ownerEndsForAll={vm.isOwner}
+        onCancel={() => setBackExitOpen(false)}
+        onConfirm={handleBackExitConfirm}
       />
     </>
   );

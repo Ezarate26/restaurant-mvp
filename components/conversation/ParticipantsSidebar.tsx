@@ -9,7 +9,7 @@ import { ExpelMemberModal } from '@/components/conversation/ExpelMemberModal';
 import { IconHitboxButton } from '@/components/ui/IconHitboxButton';
 import { TapButton } from '@/components/ui/TapButton';
 import { avatarColor, memberInitials } from '@/lib/utils/chat-avatar';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 
 export type ParticipantsSidebarProps = {
   open: boolean;
@@ -38,6 +38,15 @@ export function ParticipantsSidebar({
     null
   );
   const active = members.filter((m) => !m.left_at);
+
+  useEffect(() => {
+    if (embedded || !open) return;
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose();
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [embedded, open, onClose]);
 
   const list = (
     <ul className="flex-1 overflow-y-auto p-2 app-scrollbar">
@@ -138,11 +147,12 @@ export function ParticipantsSidebar({
         className="z-drawer-backdrop fixed inset-0 block w-full cursor-pointer bg-black/60 md:hidden"
       />
       <aside
-        className="z-drawer-panel fixed inset-y-0 right-0 flex w-full max-w-[min(280px,88vw)] flex-col bg-[var(--app-sidebar)] shadow-2xl md:static md:max-w-none md:shadow-none"
+        className="z-drawer-panel fixed inset-y-0 right-0 flex w-full max-w-[min(280px,88vw)] flex-col bg-[var(--app-sidebar)] shadow-2xl md:hidden"
         role="dialog"
+        aria-modal="true"
         aria-label="Participantes"
       >
-        <div className="flex items-center justify-between border-b border-[var(--app-border)] px-4 py-3 md:hidden">
+        <div className="flex shrink-0 items-center justify-between border-b border-[var(--app-border)] px-4 py-3">
           <div>
             <h2 className="text-sm font-bold text-[var(--app-text)]">
               Participantes
