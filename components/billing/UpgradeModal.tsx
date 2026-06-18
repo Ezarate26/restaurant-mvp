@@ -11,6 +11,7 @@ import {
   uiModalText,
   uiModalTitle,
 } from '@/components/ui/ui-classes';
+import { PRO_TRIAL_DAYS } from '@/lib/billing/constants';
 
 type CheckoutBusy = 'pro' | 'room_pass' | null;
 
@@ -22,7 +23,7 @@ type UpgradeModalProps = {
   onRegisterLeave?: () => void | Promise<void>;
   registerHref?: string;
   requiresAuth?: boolean;
-  variant?: 'voice' | 'free-time-expired';
+  variant?: 'voice' | 'free-time-expired' | 'chat-ended';
 };
 
 export function UpgradeModal({
@@ -36,6 +37,7 @@ export function UpgradeModal({
   variant = 'voice',
 }: UpgradeModalProps) {
   const isFreeTime = variant === 'free-time-expired';
+  const isChatEnded = variant === 'chat-ended';
   const [busy, setBusy] = useState<CheckoutBusy>(null);
   const [registerConfirmOpen, setRegisterConfirmOpen] = useState(false);
   const [registerBusy, setRegisterBusy] = useState(false);
@@ -90,7 +92,7 @@ export function UpgradeModal({
       <ModalFrame
         open={open && !registerConfirmOpen}
         labelledBy="upgrade-modal-title"
-        onClose={isFreeTime && !busy ? undefined : busy ? undefined : onClose}
+        onClose={isFreeTime || isChatEnded ? (busy ? undefined : onClose) : busy ? undefined : onClose}
       >
         <div className={`${uiModalPanel} relative`}>
           {busy ? (
@@ -107,12 +109,18 @@ export function UpgradeModal({
           ) : null}
 
           <h2 id="upgrade-modal-title" className={uiModalTitle}>
-            {isFreeTime ? 'Tu tiempo gratuito se agotó' : 'Habla con voz en Pro'}
+            {isChatEnded
+              ? 'La conversación finalizó'
+              : isFreeTime
+                ? 'Tu tiempo gratuito se agotó'
+                : 'Habla con voz en Pro'}
           </h2>
           <p className={uiModalText}>
-            {isFreeTime
-              ? 'Las salas gratuitas duran 10 minutos. Pásate a Pro ($9.99/mes) para salas de 60 minutos, voz con traducción y todos los idiomas, o compra un pase solo para esta sala ($2.99 USD, pago único con tarjeta).'
-              : 'Los mensajes de voz con traducción en tiempo real están disponibles en Pro ($9.99/mes USD) o con un pase por sala ($2.99 USD, pago único con tarjeta).'}
+            {isChatEnded
+              ? 'Pásate a Pro ($9.99/mes) para salas de 60 minutos, voz con traducción y todos los idiomas, o compra un pase solo para esta sala ($2.99 USD, pago único con tarjeta).'
+              : isFreeTime
+                ? 'Las salas gratuitas duran 10 minutos. Pásate a Pro ($9.99/mes) para salas de 60 minutos, voz con traducción y todos los idiomas, o compra un pase solo para esta sala ($2.99 USD, pago único con tarjeta).'
+                : 'Los mensajes de voz con traducción en tiempo real están disponibles en Pro ($9.99/mes USD) o con un pase por sala ($2.99 USD, pago único con tarjeta).'}
           </p>
 
           <ul className="mt-4 space-y-2 text-sm text-[var(--app-muted)]">
@@ -120,6 +128,16 @@ export function UpgradeModal({
             <li>· Hasta 10 participantes</li>
             <li>· Salas de 60 minutos</li>
           </ul>
+
+          {!requiresAuth ? (
+            <p className="mt-4 rounded-xl border border-[var(--app-success)]/35 bg-[var(--app-success)]/10 px-3 py-2.5 text-sm font-medium text-[var(--app-text)]">
+              <strong className="text-[var(--app-success)]">
+                {PRO_TRIAL_DAYS} días de prueba gratis
+              </strong>{' '}
+              en Pro — no se te cobrará hasta que termine el periodo de prueba (si eres
+              elegible).
+            </p>
+          ) : null}
 
           {requiresAuth ? (
             <p className="mt-4 rounded-xl bg-[var(--app-warning)]/10 px-3 py-2 text-xs text-[var(--app-warning)]">
@@ -162,7 +180,7 @@ export function UpgradeModal({
                 onClick={() => void runCheckout('pro', onUpgrade)}
                 className={uiBtnPrimary}
               >
-                {busy === 'pro' ? 'Procesando…' : 'Pro · $9.99/mes'}
+                {busy === 'pro' ? 'Procesando…' : `Pro · ${PRO_TRIAL_DAYS} días gratis`}
               </button>
             )}
           </div>

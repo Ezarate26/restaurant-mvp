@@ -8,6 +8,7 @@ import type { PlanDefinition } from '@/lib/billing/types';
 import {
   getLocalizedPlanDefinitions,
   getPlanCardCopy,
+  getProTrialCallout,
 } from '@/lib/billing/localized-plan-definitions';
 import { PlanCard } from '@/components/billing/PlanCard';
 import {
@@ -39,6 +40,7 @@ export function PricingTable({
   const landingPricing = LANDING_COPY[locale];
   const plans = useMemo(() => getLocalizedPlanDefinitions(locale), [locale]);
   const planCardCopy = useMemo(() => getPlanCardCopy(locale), [locale]);
+  const proTrialCallout = useMemo(() => getProTrialCallout(locale), [locale]);
 
   const handleSelect = async (planId: PlanDefinition['id']) => {
     setBusyId(planId);
@@ -66,6 +68,11 @@ export function PricingTable({
                 : 'Todos los precios en USD. El plan Free no requiere pago — empieza cuando quieras.'
               : landingPricing.pricingSubtitle}
           </p>
+          {variant === 'marketing' ? (
+            <p className="mx-auto mt-4 max-w-2xl rounded-xl border border-[var(--app-success)]/35 bg-[var(--app-success)]/10 px-4 py-3 text-sm font-medium text-[var(--app-text)]">
+              {proTrialCallout}
+            </p>
+          ) : null}
         </div>
       ) : null}
 

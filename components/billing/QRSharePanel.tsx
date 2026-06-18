@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { resolveJoinShareUrl } from '@/lib/brand/site-url';
 import { ActivitySpinner } from '@/components/ui/ActivitySpinner';
 import { ModalFrame } from '@/components/ui/ModalFrame';
 import {
@@ -30,11 +31,7 @@ export function QRSharePanel({
   const [qrLoading, setQrLoading] = useState(true);
   const [qrError, setQrError] = useState(false);
 
-  const resolvedUrl =
-    shareUrl ??
-    (inviteCode && typeof window !== 'undefined'
-      ? `${window.location.origin}/join/${inviteCode}`
-      : null);
+  const resolvedUrl = resolveJoinShareUrl(inviteCode, shareUrl);
 
   const qrSrc = resolvedUrl
     ? `https://api.qrserver.com/v1/create-qr-code/?size=220x220&data=${encodeURIComponent(resolvedUrl)}`

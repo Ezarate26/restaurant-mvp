@@ -31,6 +31,9 @@ export const FREE_ROOM_EXTENSION_MS = 10 * 60_000;
 /** Máximo de salas nuevas por ventana de 24 h en plan Free. */
 export const FREE_DAILY_CONVERSATION_LIMIT = 5;
 
+/** Días de prueba gratuita del plan Pro (debe coincidir con STRIPE_TRIAL_DAYS). */
+export const PRO_TRIAL_DAYS = 7;
+
 /** Ventana rodante desde la primera charla del período. */
 export const FREE_DAILY_WINDOW_MS = 24 * 60 * 60_000;
 
@@ -59,8 +62,9 @@ export const PLAN_DEFINITIONS: PlanDefinition[] = [
     currency: 'usd',
     interval: 'monthly',
     highlighted: true,
-    cta: 'Suscribirse a Pro',
+    cta: 'Probar 7 días gratis',
     features: [
+      '7 días de prueba gratis',
       'Todos los idiomas',
       'Mensajes de voz con traducción',
       'Hasta 10 participantes',

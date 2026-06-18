@@ -3,7 +3,6 @@
 import { useRouter, useSearchParams } from 'next/navigation';
 import { use, useCallback, useEffect, useRef } from 'react';
 import { ConversationChatView } from '@/components/conversation/ConversationChatView';
-import { PostConversationRegistration } from '@/components/conversation/PostConversationRegistration';
 import { useConversationChatViewModel } from '@/lib/viewmodels/useConversationChatViewModel';
 import { AUTH_HOME_PATH } from '@/lib/constants/routes';
 import { clearActiveConversationSession } from '@/lib/utils/active-conversation-session';
@@ -77,6 +76,7 @@ function ConversationScreen({
       fetchMemberById(supabase, memberId),
     ]);
     if (!conv || !mem || mem.left_at || conv.status === 'closed') {
+      if (!mem?.user_id) return true;
       await redirectAfterLeave({ sessionEndedByTime: true });
       return true;
     }
@@ -89,15 +89,20 @@ function ConversationScreen({
 
   const handleGoHome = useCallback(
     async (sessionEndedByTime = false) => {
-      await vm.leaveConversation();
+      if (!vm.member?.left_at && vm.conversation?.status !== 'closed') {
+        await vm.leaveConversation();
+      }
       await redirectAfterLeave({ sessionEndedByTime });
     },
     [vm, redirectAfterLeave]
   );
 
   const handleLeave = useCallback(async () => {
+    const isAnonymous = !vm.member?.user_id;
     await vm.leaveConversation();
-    await redirectAfterLeave();
+    if (!isAnonymous) {
+      await redirectAfterLeave();
+    }
   }, [vm, redirectAfterLeave]);
 
   const handleCloseSilent = useCallback(async () => {
@@ -105,9 +110,14 @@ function ConversationScreen({
   }, [vm]);
 
   const handleCloseForEveryone = useCallback(async () => {
+    const isAnonymous = !vm.member?.user_id;
     await vm.closeConversationForEveryone();
-    await redirectAfterLeave();
+    if (!isAnonymous) {
+      await redirectAfterLeave();
+    }
   }, [vm, redirectAfterLeave]);
+
+  const isAnonymousMember = Boolean(vm.member && !vm.member.user_id);
 
   const sessionUnavailable =
     !vm.isLoading &&
@@ -117,8 +127,9 @@ function ConversationScreen({
 
   useEffect(() => {
     if (!sessionUnavailable) return;
+    if (isAnonymousMember) return;
     void redirectAfterLeave({ sessionEndedByTime: true });
-  }, [sessionUnavailable, redirectAfterLeave]);
+  }, [sessionUnavailable, isAnonymousMember, redirectAfterLeave]);
 
   useEffect(() => {
     const onPageShow = (event: PageTransitionEvent) => {
@@ -129,13 +140,20 @@ function ConversationScreen({
     return () => window.removeEventListener('pageshow', onPageShow);
   }, [redirectIfSessionEnded]);
 
-  if (vm.isLoading || sessionUnavailable) {
+  if (vm.isLoading) {
     return (
       <div className="flex min-h-screen flex-col items-center justify-center bg-[var(--app-bg)] text-sm text-[var(--app-muted)]">
         <span className="inline-block h-6 w-6 animate-spin rounded-full border-2 border-[var(--app-accent)] border-t-transparent" />
-        <span className="mt-3">
-          {sessionUnavailable ? 'Redirigiendo…' : 'Cargando conversación…'}
-        </span>
+        <span className="mt-3">Cargando conversación…</span>
+      </div>
+    );
+  }
+
+  if (sessionUnavailable && !isAnonymousMember) {
+    return (
+      <div className="flex min-h-screen flex-col items-center justify-center bg-[var(--app-bg)] text-sm text-[var(--app-muted)]">
+        <span className="inline-block h-6 w-6 animate-spin rounded-full border-2 border-[var(--app-accent)] border-t-transparent" />
+        <span className="mt-3">Redirigiendo…</span>
       </div>
     );
   }
@@ -201,10 +219,10 @@ function ConversationScreen({
         conversationStatus={vm.conversation?.status ?? null}
         closedByMemberId={vm.conversation?.closed_by_member_id ?? null}
         onExtendSession={vm.extendSession}
-      />
-      <PostConversationRegistration
-        open={vm.showRegistrationPrompt}
-        onOpenChange={vm.setShowRegistrationPrompt}
+        showAnonymousProInvite={
+          vm.showAnonymousProInvite ||
+          (isAnonymousMember && sessionUnavailable)
+        }
       />
     </>
   );

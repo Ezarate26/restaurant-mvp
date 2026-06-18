@@ -22,6 +22,8 @@ const DEFAULT_CARD_COPY: PlanCardCopy = {
   perMonth: 'por mes',
   oneTime: 'pago único',
   usd: 'USD',
+  proTrialBadge: '7 días de prueba gratis',
+  proTrialSubtext: 'Luego $9.99/mes USD · cancela cuando quieras',
 };
 
 export function PlanCard({
@@ -68,6 +70,14 @@ export function PlanCard({
           <p className="mt-1 text-xs text-[var(--app-muted)]">{cardCopy.perMonth}</p>
         ) : plan.interval === 'one_time' ? (
           <p className="mt-1 text-xs text-[var(--app-muted)]">{cardCopy.oneTime}</p>
+        ) : null}
+        {plan.id === 'pro' ? (
+          <div className="mt-3 space-y-1">
+            <p className="rounded-lg bg-[var(--app-success)]/15 px-3 py-2 text-sm font-semibold text-[var(--app-success)]">
+              {cardCopy.proTrialBadge}
+            </p>
+            <p className="text-xs text-[var(--app-muted)]">{cardCopy.proTrialSubtext}</p>
+          </div>
         ) : null}
       </div>
 

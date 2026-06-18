@@ -42,7 +42,7 @@ export interface UseChatRealtimeArgs {
   setMembers: React.Dispatch<React.SetStateAction<ConversationMember[]>>;
   setMember: React.Dispatch<React.SetStateAction<ConversationMember | null>>;
   setConversation: React.Dispatch<React.SetStateAction<Conversation | null>>;
-  setShowRegistrationPrompt: React.Dispatch<React.SetStateAction<boolean>>;
+  setShowAnonymousProInvite: React.Dispatch<React.SetStateAction<boolean>>;
 }
 
 /**
@@ -58,7 +58,7 @@ export function useChatRealtime({
   setMembers,
   setMember,
   setConversation,
-  setShowRegistrationPrompt,
+  setShowAnonymousProInvite,
 }: UseChatRealtimeArgs) {
   const [typingUsers, setTypingUsers] = useState<TypingUser[]>([]);
   const [recordingUsers, setRecordingUsers] = useState<TypingUser[]>([]);
@@ -169,6 +169,7 @@ export function useChatRealtime({
             clearActiveConversationSession();
             setMember((prev) => {
               if (!prev || prev.left_at) return prev;
+              if (!prev.user_id) setShowAnonymousProInvite(true);
               return {
                 ...prev,
                 left_at: conv.closed_at ?? new Date().toISOString(),
@@ -200,7 +201,7 @@ export function useChatRealtime({
           if (updated.left_at) {
             setMember(updated);
             clearActiveConversationSession();
-            if (!updated.user_id) setShowRegistrationPrompt(true);
+            if (!updated.user_id) setShowAnonymousProInvite(true);
           }
         }
       )

@@ -12,6 +12,7 @@ import { useSupabaseAuth } from '@/lib/hooks/useSupabaseAuth';
 import { usePlan } from '@/lib/billing/PlanProvider';
 import { AUTH_HOME_PATH } from '@/lib/constants/routes';
 import { uiCard } from '@/components/ui/ui-classes';
+import { PRO_TRIAL_DAYS } from '@/lib/billing/constants';
 
 export function BillingPageClient() {
   const searchParams = useSearchParams();
@@ -118,7 +119,8 @@ export function BillingPageClient() {
               Planes y facturación
             </h1>
             <p className="mt-2 text-sm text-[var(--app-muted)]">
-              Todos los planes en USD. El estado del plan siempre viene del servidor.
+              Todos los planes en USD. Pro incluye {PRO_TRIAL_DAYS} días de prueba gratis.
+              El estado del plan siempre viene del servidor.
             </p>
           </div>
           <BillingStatusBadge

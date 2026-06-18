@@ -19,6 +19,7 @@ import {
 } from '@/lib/model/conversation-members.repository';
 import { applyTranscriptionFallbacksForMessages } from '@/lib/model/voice-transcription-fallback';
 import { requestProJoinRoomBoost } from '@/lib/billing/conversation-boost-client';
+import { joinInviteUrl } from '@/lib/brand/site-url';
 import {
   clearActiveConversationSession,
   setActiveConversationSession,
@@ -54,12 +55,13 @@ export function useConversationChatViewModel({
   const [isLoading, setIsLoading] = useState(true);
   const [leaveBusy, setLeaveBusy] = useState(false);
   const [expelBusy, setExpelBusy] = useState(false);
-  const [showRegistrationPrompt, setShowRegistrationPrompt] = useState(false);
+  const [showAnonymousProInvite, setShowAnonymousProInvite] = useState(false);
   const [lastReadAt, setLastReadAt] = useState<string | null>(null);
   const [voiceBusy, setVoiceBusy] = useState(false);
   const [participantsOpen, setParticipantsOpen] = useState(false);
 
   const latestLanguagesRef = useRef<string[]>([]);
+  const sendingMessageRef = useRef(false);
 
   const { languages: conversationLanguages } =
     useConversationLanguages(conversationId);
@@ -81,7 +83,7 @@ export function useConversationChatViewModel({
     setMembers,
     setMember,
     setConversation,
-    setShowRegistrationPrompt,
+    setShowAnonymousProInvite,
   });
 
   useEffect(() => {
@@ -188,24 +190,36 @@ export function useConversationChatViewModel({
   );
 
   const sendMessage = useCallback(async () => {
-    if (!text.trim() || !conversation || !member) return;
-    if (conversation.status === 'closed' || member.left_at) return;
     const body = text.trim();
+    if (!body || !conversation || !member) return;
+    if (conversation.status === 'closed' || member.left_at) return;
+    if (sendingMessageRef.current) return;
+
+    sendingMessageRef.current = true;
+    setText('');
+    notifyTypingStop();
+
     const original = normalizeLanguageCode(
       member.preferred_language?.trim() || preferredLanguage || 'es'
     );
-    const { messages: updated } = await handleSendMessage({
-      insertRow: {
-        conversation_id: conversation.id,
-        member_id: member.id,
-        content: body,
-        original_language: original,
-      },
-      latestLanguagesRef,
-    });
-    setMessages(updated);
-    setText('');
-    notifyTypingStop();
+
+    try {
+      const { messages: updated } = await handleSendMessage({
+        insertRow: {
+          conversation_id: conversation.id,
+          member_id: member.id,
+          content: body,
+          original_language: original,
+        },
+        latestLanguagesRef,
+      });
+      setMessages(updated);
+    } catch (e) {
+      setText((prev) => (prev.trim().length > 0 ? prev : body));
+      setError(e instanceof Error ? e.message : 'No se pudo enviar el mensaje');
+    } finally {
+      sendingMessageRef.current = false;
+    }
   }, [text, conversation, member, preferredLanguage, handleSendMessage, notifyTypingStop]);
 
   const sendVoiceMessage = useCallback(async () => {
@@ -271,7 +285,7 @@ export function useConversationChatViewModel({
     );
     setMember((prev) => (prev ? { ...prev, left_at: now } : prev));
     clearActiveConversationSession();
-    if (!member.user_id) setShowRegistrationPrompt(true);
+    if (!member.user_id) setShowAnonymousProInvite(true);
   }, [conversation?.id, member]);
 
   const leaveConversation = useCallback(async () => {
@@ -298,7 +312,7 @@ export function useConversationChatViewModel({
         prev ? { ...prev, left_at: new Date().toISOString() } : prev
       );
       clearActiveConversationSession();
-      if (!member.user_id) setShowRegistrationPrompt(true);
+      if (!member.user_id) setShowAnonymousProInvite(true);
     } finally {
       setLeaveBusy(false);
     }
@@ -358,8 +372,8 @@ export function useConversationChatViewModel({
   );
 
   const shareUrl = useMemo(() => {
-    if (typeof window === 'undefined' || !conversation?.invite_code) return null;
-    return `${window.location.origin}/join/${conversation.invite_code}`;
+    if (!conversation?.invite_code) return null;
+    return joinInviteUrl(conversation.invite_code);
   }, [conversation?.invite_code]);
 
   const chatComposerDisabled =
@@ -440,8 +454,8 @@ export function useConversationChatViewModel({
     isOwner,
     inviteCode: conversation?.invite_code ?? null,
     shareUrl,
-    showRegistrationPrompt,
-    setShowRegistrationPrompt,
+    showAnonymousProInvite,
+    setShowAnonymousProInvite,
     leaveConversation,
     expelMember,
     isLoading,

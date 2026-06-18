@@ -9,32 +9,56 @@ import {
   type FreeDailyUsageSnapshot,
 } from '@/lib/billing/free-daily-limit';
 
+async function fetchOwnerMemberIds(
+  client: SupabaseClient,
+  args: { userId?: string | null; deviceId?: string | null }
+): Promise<string[]> {
+  const ownerIds = new Set<string>();
+
+  if (args.userId) {
+    const { data, error } = await client
+      .from('conversation_members')
+      .select('id')
+      .eq('role', 'owner')
+      .eq('user_id', args.userId);
+    if (error) {
+      console.error('fetchOwnerMemberIds:user', error);
+    } else {
+      for (const row of data ?? []) {
+        ownerIds.add(row.id as string);
+      }
+    }
+  }
+
+  if (args.deviceId) {
+    const { data, error } = await client
+      .from('conversation_members')
+      .select('id')
+      .eq('role', 'owner')
+      .eq('device_id', args.deviceId);
+    if (error) {
+      console.error('fetchOwnerMemberIds:device', error);
+    } else {
+      for (const row of data ?? []) {
+        ownerIds.add(row.id as string);
+      }
+    }
+  }
+
+  return [...ownerIds];
+}
+
 async function fetchOwnerConversationTimes(
   client: SupabaseClient,
   args: { userId?: string | null; deviceId?: string | null }
 ): Promise<string[]> {
   const since = new Date(Date.now() - 30 * 24 * 60 * 60_000).toISOString();
 
-  let memberQuery = client
-    .from('conversation_members')
-    .select('id')
-    .eq('role', 'owner');
-
-  if (args.userId) {
-    memberQuery = memberQuery.eq('user_id', args.userId);
-  } else if (args.deviceId) {
-    memberQuery = memberQuery.eq('device_id', args.deviceId);
-  } else {
+  if (!args.userId && !args.deviceId?.trim()) {
     return [];
   }
 
-  const { data: members, error: memberError } = await memberQuery;
-  if (memberError) {
-    console.error('fetchOwnerConversationTimes:members', memberError);
-    return [];
-  }
-
-  const ownerIds = (members ?? []).map((m) => m.id as string);
+  const ownerIds = await fetchOwnerMemberIds(client, args);
   if (ownerIds.length === 0) return [];
 
   const { data: conversations, error: convError } = await client
@@ -108,7 +132,10 @@ export async function getFreeCreateEligibility(
     }
   }
 
-  const times = await fetchOwnerConversationTimes(client, args);
+  const times = await fetchOwnerConversationTimes(client, {
+    userId: args.userId,
+    deviceId: args.deviceId?.trim() || null,
+  });
   const usage = computeFreeDailyUsage(times);
 
   return {
@@ -122,7 +149,17 @@ export async function assertCanCreateFreeConversation(
   client: SupabaseClient,
   args: { userId?: string | null; deviceId?: string | null }
 ): Promise<void> {
-  const eligibility = await getFreeCreateEligibility(client, args);
+  const deviceId = args.deviceId?.trim() || null;
+  if (!args.userId && !deviceId) {
+    throw new Error(
+      'No se pudo identificar tu dispositivo. Activa las cookies o el almacenamiento local e inténtalo de nuevo.'
+    );
+  }
+
+  const eligibility = await getFreeCreateEligibility(client, {
+    userId: args.userId,
+    deviceId,
+  });
   if (eligibility.unlimited || eligibility.canCreate) return;
   throw new Error(
     eligibility.message || 'Límite diario de conversaciones alcanzado'

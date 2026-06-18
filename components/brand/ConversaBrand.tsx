@@ -1,4 +1,5 @@
 import Link from 'next/link';
+import { CONVERSA_APP_NAME } from '@/lib/brand/constants';
 import { ConversaIcon } from '@/components/brand/ConversaIcon';
 
 type ConversaBrandProps = {
@@ -26,7 +27,7 @@ export function ConversaBrand({
       {showText ? (
         <div className="min-w-0 flex-1">
           <p className="text-base font-bold leading-tight text-[var(--app-text)] sm:text-sm sm:truncate">
-            Conversa
+            {CONVERSA_APP_NAME}
           </p>
           {subtitle ? (
             <p className="text-[11px] leading-snug text-[var(--app-muted)] sm:truncate sm:text-[10px]">
