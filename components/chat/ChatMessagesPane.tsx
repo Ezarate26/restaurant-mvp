@@ -27,8 +27,8 @@ type ChatMessagesPaneProps = {
   onOpenInvite?: () => void;
   onShareInvite?: () => void;
   composerDisabled?: boolean;
-  /** Sin auto-scroll al fondo (p. ej. teclado abierto en móvil). */
-  suppressAutoScroll?: boolean;
+  onScrollNearTopChange?: (nearTop: boolean) => void;
+  preferInstantScroll?: boolean;
 };
 
 function useMemberActivityEvents(members: ConversationMember[]): ActivityEvent[] {
@@ -91,7 +91,8 @@ export function ChatMessagesPane({
   onOpenInvite,
   onShareInvite,
   composerDisabled = false,
-  suppressAutoScroll = false,
+  onScrollNearTopChange,
+  preferInstantScroll = false,
 }: ChatMessagesPaneProps) {
   const scrollContainerRef = useRef<HTMLDivElement | null>(null);
   const messageEndRef = useRef<HTMLDivElement | null>(null);
@@ -111,23 +112,34 @@ export function ChatMessagesPane({
   };
 
   useEffect(() => {
-    if (showSoloOwnerInvite || suppressAutoScroll) return;
-    scrollToBottom('smooth');
+    if (showSoloOwnerInvite) return;
+    scrollToBottom(preferInstantScroll ? 'auto' : 'smooth');
   }, [
     messages,
     typingLabel,
     recordingLabel,
     activityEvents.length,
     showSoloOwnerInvite,
-    suppressAutoScroll,
+    preferInstantScroll,
   ]);
+
+  useEffect(() => {
+    if (showSoloOwnerInvite || !preferInstantScroll) return;
+    scrollToBottom('auto');
+  }, [preferInstantScroll, showSoloOwnerInvite]);
+
+  const handleScroll = (e: UIEvent<HTMLDivElement>) => {
+    const el = e.currentTarget;
+    onScrollNearTopChange?.(el.scrollTop < 48);
+    onMessagesScroll?.(e);
+  };
 
   return (
     <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
       <div
         ref={scrollContainerRef}
         className="chat-pane-bg app-scrollbar flex min-h-0 flex-1 flex-col overflow-y-auto overscroll-y-contain py-3"
-        onScroll={onMessagesScroll}
+        onScroll={handleScroll}
       >
         {showSoloOwnerInvite ? (
           <SoloOwnerInvitePrompt

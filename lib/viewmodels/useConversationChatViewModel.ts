@@ -63,6 +63,7 @@ export function useConversationChatViewModel({
   const [lastReadAt, setLastReadAt] = useState<string | null>(null);
   const [voiceBusy, setVoiceBusy] = useState(false);
   const [participantsOpen, setParticipantsOpen] = useState(false);
+  const [languageChangeBusy, setLanguageChangeBusy] = useState(false);
 
   const latestLanguagesRef = useRef<string[]>([]);
   const sendingMessageRef = useRef(false);
@@ -211,14 +212,19 @@ export function useConversationChatViewModel({
   const selectLanguage = useCallback(
     async (code: string) => {
       if (!member?.id) return;
-      const updated = await updateMemberLanguage(supabase, member.id, code);
-      setMember(updated);
-      const { messages: hydrated } = await hydrateViewerMessages({
-        conversationId,
-        viewerLanguage: normalizeLanguageCode(code),
-        latestLanguagesRef,
-      });
-      setMessages(hydrated);
+      setLanguageChangeBusy(true);
+      try {
+        const updated = await updateMemberLanguage(supabase, member.id, code);
+        setMember(updated);
+        const { messages: hydrated } = await hydrateViewerMessages({
+          conversationId,
+          viewerLanguage: normalizeLanguageCode(code),
+          latestLanguagesRef,
+        });
+        setMessages(hydrated);
+      } finally {
+        setLanguageChangeBusy(false);
+      }
     },
     [member?.id, conversationId, hydrateViewerMessages]
   );
@@ -514,6 +520,7 @@ export function useConversationChatViewModel({
     error,
     selectedLanguage: member?.preferred_language ?? preferredLanguage,
     selectLanguage,
+    languageChangeBusy,
     leaveBusy,
     expelBusy,
     lastReadAt,
