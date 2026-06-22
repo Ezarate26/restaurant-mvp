@@ -16,6 +16,7 @@ export type FreeSessionEndedKind = 'owner-upgrade' | 'guest-ended' | null;
 type UseRoomSessionEnforcementArgs = {
   conversationId: string;
   members: Pick<ConversationMember, 'joined_at' | 'left_at'>[];
+  roomTimerStartedAt?: string | null;
   durationMs: number;
   sessionExtraMs: number;
   uiMode: BillingUiMode;
@@ -25,11 +26,13 @@ type UseRoomSessionEnforcementArgs = {
   onEndSession: () => void | Promise<void>;
   onExtendSession: (extraMs: number) => void | Promise<void>;
   onFreeGuestExpire?: () => void | Promise<void>;
+  onEnforceExpiry?: () => void | Promise<void>;
 };
 
 export function useRoomSessionEnforcement({
   conversationId,
   members,
+  roomTimerStartedAt = null,
   durationMs,
   sessionExtraMs,
   uiMode,
@@ -39,6 +42,7 @@ export function useRoomSessionEnforcement({
   onEndSession,
   onExtendSession,
   onFreeGuestExpire,
+  onEnforceExpiry,
 }: UseRoomSessionEnforcementArgs) {
   const [expiredModalOpen, setExpiredModalOpen] = useState(false);
   const [graceEndsAt, setGraceEndsAt] = useState<number | null>(null);
@@ -51,8 +55,15 @@ export function useRoomSessionEnforcement({
   onEndSessionRef.current = onEndSession;
   const onFreeGuestExpireRef = useRef(onFreeGuestExpire);
   onFreeGuestExpireRef.current = onFreeGuestExpire;
+  const onEnforceExpiryRef = useRef(onEnforceExpiry);
+  onEnforceExpiryRef.current = onEnforceExpiry;
 
-  const timer = useRoomParticipantTimer(members, durationMs, sessionExtraMs);
+  const timer = useRoomParticipantTimer(
+    members,
+    durationMs,
+    sessionExtraMs,
+    roomTimerStartedAt
+  );
 
   useEffect(() => {
     if (
@@ -82,21 +93,29 @@ export function useRoomSessionEnforcement({
     if (uiMode === 'free') {
       freeEndedHandledRef.current = true;
       if (isOwner) {
-        setSessionEnding(true);
+        setFreeEndedKind('owner-upgrade');
         void (async () => {
           try {
+            await onEnforceExpiryRef.current?.();
             await onEndSessionRef.current();
           } catch (e) {
             console.error('useRoomSessionEnforcement:freeOwnerEnd', e);
-            setSessionEnding(false);
             freeEndedHandledRef.current = false;
-            return;
+            setFreeEndedKind(null);
           }
-          setFreeEndedKind('owner-upgrade');
         })();
       } else {
         setFreeEndedKind('guest-ended');
-        void onFreeGuestExpireRef.current?.();
+        void (async () => {
+          try {
+            await onEnforceExpiryRef.current?.();
+            await onFreeGuestExpireRef.current?.();
+          } catch (e) {
+            console.error('useRoomSessionEnforcement:freeGuestEnd', e);
+            freeEndedHandledRef.current = false;
+            setFreeEndedKind(null);
+          }
+        })();
       }
       return;
     }
@@ -171,7 +190,7 @@ export function useRoomSessionEnforcement({
   }, []);
 
   const roomTimeBlocked =
-    freeEndedKind === 'guest-ended' ||
+    freeEndedKind != null ||
     (isConversationActive && (timer.expired || expiredModalOpen));
 
   return {

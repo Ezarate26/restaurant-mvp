@@ -21,6 +21,8 @@ type UseRoomTimerOptions = {
   /** Tiempo fijo sin cuenta regresiva (esperando 2.º participante o pausa). */
   holdRemainingMs?: number;
   holdProgress?: number;
+  /** En espera de 2.º participante: nunca marcar como expirado. */
+  holdWaiting?: boolean;
 };
 
 export function useRoomTimer(
@@ -53,12 +55,13 @@ export function useRoomTimer(
     const progress =
       options.holdProgress ??
       (totalMs > 0 ? Math.min(1, 1 - remainingMs / totalMs) : 0);
+    const expired = !options.holdWaiting && remainingMs <= 0;
     return {
       remainingMs,
       totalMs,
-      expired: false,
+      expired,
       progress,
-      label: formatRemaining(remainingMs),
+      label: expired ? 'Tiempo agotado' : formatRemaining(remainingMs),
     };
   }
 

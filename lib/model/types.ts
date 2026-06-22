@@ -13,6 +13,7 @@ export interface Conversation {
   closed_by_member_id: string | null;
   session_extra_ms?: number | null;
   session_free_bonus_used?: boolean | null;
+  room_timer_started_at?: string | null;
   created_at?: string | null;
   closed_at?: string | null;
 }

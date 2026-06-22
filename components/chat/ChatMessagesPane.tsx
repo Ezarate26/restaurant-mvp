@@ -27,6 +27,8 @@ type ChatMessagesPaneProps = {
   onOpenInvite?: () => void;
   onShareInvite?: () => void;
   composerDisabled?: boolean;
+  /** Sin auto-scroll al fondo (p. ej. teclado abierto en móvil). */
+  suppressAutoScroll?: boolean;
 };
 
 function useMemberActivityEvents(members: ConversationMember[]): ActivityEvent[] {
@@ -89,7 +91,9 @@ export function ChatMessagesPane({
   onOpenInvite,
   onShareInvite,
   composerDisabled = false,
+  suppressAutoScroll = false,
 }: ChatMessagesPaneProps) {
+  const scrollContainerRef = useRef<HTMLDivElement | null>(null);
   const messageEndRef = useRef<HTMLDivElement | null>(null);
   const activityEvents = useMemberActivityEvents(members);
   const activeCount = members.filter((m) => !m.left_at).length;
@@ -100,15 +104,29 @@ export function ChatMessagesPane({
     activityEvents.length === 0 &&
     Boolean(onOpenInvite || onShareInvite);
 
+  const scrollToBottom = (behavior: ScrollBehavior = 'smooth') => {
+    const el = scrollContainerRef.current;
+    if (!el) return;
+    el.scrollTo({ top: el.scrollHeight, behavior });
+  };
+
   useEffect(() => {
-    if (showSoloOwnerInvite) return;
-    messageEndRef.current?.scrollIntoView({ block: 'end', behavior: 'smooth' });
-  }, [messages, typingLabel, recordingLabel, activityEvents.length, showSoloOwnerInvite]);
+    if (showSoloOwnerInvite || suppressAutoScroll) return;
+    scrollToBottom('smooth');
+  }, [
+    messages,
+    typingLabel,
+    recordingLabel,
+    activityEvents.length,
+    showSoloOwnerInvite,
+    suppressAutoScroll,
+  ]);
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col">
+    <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
       <div
-        className="chat-pane-bg app-scrollbar flex min-h-0 flex-1 flex-col overflow-y-auto py-3"
+        ref={scrollContainerRef}
+        className="chat-pane-bg app-scrollbar flex min-h-0 flex-1 flex-col overflow-y-auto overscroll-y-contain py-3"
         onScroll={onMessagesScroll}
       >
         {showSoloOwnerInvite ? (
