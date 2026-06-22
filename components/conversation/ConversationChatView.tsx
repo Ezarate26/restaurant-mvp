@@ -24,7 +24,6 @@ import { markPendingRoomPassExtension } from '@/lib/billing/room-session.storage
 import { useRoomSessionEnforcement } from '@/lib/billing/useRoomSessionEnforcement';
 import { resolveJoinShareUrl } from '@/lib/brand/site-url';
 import { getJoinLanguageOptions } from '@/lib/billing/language-access';
-import { useIsMobileViewport } from '@/lib/hooks/useIsMobileViewport';
 import { normalizeLanguageCode } from '@/constants/languages';
 
 export interface ConversationChatViewProps {
@@ -143,9 +142,6 @@ export function ConversationChatView({
   const [inviteOpen, setInviteOpen] = useState(false);
   const [shareCopied, setShareCopied] = useState(false);
   const [upgradeOpen, setUpgradeOpen] = useState(false);
-  const [composerInputFocused, setComposerInputFocused] = useState(false);
-  const [messagesAtTop, setMessagesAtTop] = useState(true);
-  const isMobileViewport = useIsMobileViewport();
 
   const plan = usePlan();
 
@@ -176,8 +172,6 @@ export function ConversationChatView({
   const chatLanguage = normalizeLanguageCode(
     viewerLanguage?.trim() || 'es'
   );
-
-  const hideMobileChatChrome = isMobileViewport && !messagesAtTop;
 
   const chatReturnUrl =
     currentMemberId != null
@@ -340,8 +334,7 @@ export function ConversationChatView({
       />
 
       <div className="flex min-h-0 min-w-0 flex-1 flex-col">
-        <div className={hideMobileChatChrome ? 'max-md:hidden' : undefined}>
-          <ChatHeader
+        <ChatHeader
           conversationId={conversationId}
           headerLabel={headerLabel}
           members={members}
@@ -426,7 +419,6 @@ export function ConversationChatView({
             </TapButton>
           </div>
         ) : null}
-        </div>
 
         <div className="flex min-h-0 flex-1 overflow-hidden">
           <main className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
@@ -445,16 +437,12 @@ export function ConversationChatView({
               onOpenInvite={() => setInviteOpen(true)}
               onShareInvite={() => void handleShare()}
               composerDisabled={effectiveComposerDisabled}
-              onScrollNearTopChange={setMessagesAtTop}
-              preferInstantScroll={composerInputFocused}
             />
 
             <ChatComposer
               message={message}
               disabled={effectiveComposerDisabled}
               waitingForParticipant={waitingForSecondParticipant}
-              inputFocused={composerInputFocused}
-              onInputFocusChange={setComposerInputFocused}
               isRecording={isRecordingVoice}
               voiceBusy={voiceBusy}
               waveformLevels={waveformLevels}

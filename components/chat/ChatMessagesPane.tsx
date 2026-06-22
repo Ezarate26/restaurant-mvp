@@ -5,6 +5,7 @@ import { MessageBubble } from '@/components/chat/MessageBubble';
 import { ChatActivityIndicator } from '@/components/chat/ChatActivityIndicator';
 import { SystemMessageCard } from '@/components/chat/SystemMessageCard';
 import { SoloOwnerInvitePrompt } from '@/components/chat/SoloOwnerInvitePrompt';
+import { useChatAutoScroll } from '@/lib/hooks/useChatAutoScroll';
 import type { ConversationMember, Message } from '@/lib/model/types';
 
 type ActivityEvent = {
@@ -27,8 +28,6 @@ type ChatMessagesPaneProps = {
   onOpenInvite?: () => void;
   onShareInvite?: () => void;
   composerDisabled?: boolean;
-  onScrollNearTopChange?: (atTop: boolean) => void;
-  preferInstantScroll?: boolean;
 };
 
 function useMemberActivityEvents(members: ConversationMember[]): ActivityEvent[] {
@@ -91,12 +90,10 @@ export function ChatMessagesPane({
   onOpenInvite,
   onShareInvite,
   composerDisabled = false,
-  onScrollNearTopChange,
-  preferInstantScroll = false,
 }: ChatMessagesPaneProps) {
-  const scrollContainerRef = useRef<HTMLDivElement | null>(null);
-  const messageEndRef = useRef<HTMLDivElement | null>(null);
   const activityEvents = useMemberActivityEvents(members);
+  const { containerRef, handleScroll } = useChatAutoScroll(messages);
+
   const activeCount = members.filter((m) => !m.left_at).length;
   const showSoloOwnerInvite =
     isOwner &&
@@ -105,59 +102,17 @@ export function ChatMessagesPane({
     activityEvents.length === 0 &&
     Boolean(onOpenInvite || onShareInvite);
 
-  const scrollToBottom = (behavior: ScrollBehavior = 'smooth') => {
-    const el = scrollContainerRef.current;
-    if (!el) return;
-    el.scrollTo({ top: el.scrollHeight, behavior });
-    window.requestAnimationFrame(() => {
-      onScrollNearTopChange?.(el.scrollTop < 48);
-    });
-  };
-
-  const reportScrollPosition = () => {
-    const el = scrollContainerRef.current;
-    if (!el) return;
-    onScrollNearTopChange?.(el.scrollTop < 48);
-  };
-
-  useEffect(() => {
-    reportScrollPosition();
-    const el = scrollContainerRef.current;
-    if (!el || typeof ResizeObserver === 'undefined') return;
-    const ro = new ResizeObserver(() => reportScrollPosition());
-    ro.observe(el);
-    return () => ro.disconnect();
-  }, [messages.length, activityEvents.length, showSoloOwnerInvite]);
-
-  useEffect(() => {
-    if (showSoloOwnerInvite) return;
-    scrollToBottom(preferInstantScroll ? 'auto' : 'smooth');
-  }, [
-    messages,
-    typingLabel,
-    recordingLabel,
-    activityEvents.length,
-    showSoloOwnerInvite,
-    preferInstantScroll,
-  ]);
-
-  useEffect(() => {
-    if (showSoloOwnerInvite || !preferInstantScroll) return;
-    scrollToBottom('auto');
-  }, [preferInstantScroll, showSoloOwnerInvite]);
-
-  const handleScroll = (e: UIEvent<HTMLDivElement>) => {
-    const el = e.currentTarget;
-    onScrollNearTopChange?.(el.scrollTop < 48);
+  const onScroll = (e: UIEvent<HTMLDivElement>) => {
+    handleScroll();
     onMessagesScroll?.(e);
   };
 
   return (
     <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
       <div
-        ref={scrollContainerRef}
+        ref={containerRef}
         className="chat-pane-bg app-scrollbar flex min-h-0 flex-1 flex-col overflow-y-auto overscroll-y-contain py-3"
-        onScroll={handleScroll}
+        onScroll={onScroll}
       >
         {showSoloOwnerInvite ? (
           <SoloOwnerInvitePrompt
@@ -204,8 +159,6 @@ export function ChatMessagesPane({
         {closureBanner ? (
           <SystemMessageCard>{closureBanner}</SystemMessageCard>
         ) : null}
-
-        <div ref={messageEndRef} className="h-1 shrink-0" />
       </div>
 
       {typingLabel ? (

@@ -94,9 +94,17 @@ export function useChatRealtime({
         },
         (payload) => {
           const msg = payload.new as Message;
-          setMessages((prev) =>
-            prev.some((m) => m.id === msg.id) ? prev : [...prev, msg]
-          );
+          setMessages((prev) => {
+            if (prev.some((m) => m.id === msg.id)) return prev;
+            const withoutOptimistic = prev.filter(
+              (m) =>
+                !(
+                  m.id.startsWith('optimistic-') &&
+                  m.member_id === msg.member_id
+                )
+            );
+            return [...withoutOptimistic, msg];
+          });
           void ensureTranslationsForNewMessage(supabase, cid, msg).then(
             async () => {
               if (conversationIdRef.current !== cid) return;

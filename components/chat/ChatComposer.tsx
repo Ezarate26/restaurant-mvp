@@ -1,17 +1,13 @@
 'use client';
 
-import { useEffect, useRef } from 'react';
 import { VoiceRecordingBar } from '@/components/chat/VoiceRecordingBar';
 import { VoiceButton } from '@/components/billing/VoiceButton';
 import { TapButton } from '@/components/ui/TapButton';
-import { useVisualViewportOffset } from '@/lib/hooks/useVisualViewportOffset';
 
 type ChatComposerProps = {
   message: string;
   disabled?: boolean;
   waitingForParticipant?: boolean;
-  inputFocused?: boolean;
-  onInputFocusChange?: (focused: boolean) => void;
   isRecording?: boolean;
   voiceBusy?: boolean;
   waveformLevels?: number[];
@@ -28,8 +24,8 @@ type ChatComposerProps = {
   onVoiceUpgrade?: () => void;
 };
 
-/** Evita que el botón Enviar robe el foco y cierre el teclado en móvil. */
-function preventInputBlur(e: { preventDefault(): void }) {
+/** Evita que el botón Enviar robe el foco del input en móvil. */
+function keepInputFocused(e: { preventDefault(): void }) {
   e.preventDefault();
 }
 
@@ -37,8 +33,6 @@ export function ChatComposer({
   message,
   disabled = false,
   waitingForParticipant = false,
-  inputFocused = false,
-  onInputFocusChange,
   isRecording = false,
   voiceBusy = false,
   waveformLevels = [],
@@ -54,22 +48,6 @@ export function ChatComposer({
   onCancelVoice,
   onVoiceUpgrade,
 }: ChatComposerProps) {
-  const inputRef = useRef<HTMLInputElement>(null);
-  const blurTimerRef = useRef<number | null>(null);
-  const keyboardOffset = useVisualViewportOffset(inputFocused);
-  const prevKeyboardOffsetRef = useRef(0);
-
-  useEffect(() => {
-    if (
-      prevKeyboardOffsetRef.current > 0 &&
-      keyboardOffset === 0 &&
-      inputFocused
-    ) {
-      onInputFocusChange?.(false);
-    }
-    prevKeyboardOffsetRef.current = keyboardOffset;
-  }, [keyboardOffset, inputFocused, onInputFocusChange]);
-
   const canSend = !disabled && message.trim().length > 0;
   const showVoiceTooltipSpace =
     Boolean(onStartVoice) && !voiceAllowed && !isRecording && !voiceBusy;
@@ -81,15 +59,7 @@ export function ChatComposer({
 
   return (
     <div
-      className={`relative z-20 shrink-0 overflow-visible border-t border-[var(--app-border)] bg-[var(--app-sidebar)] px-3 sm:px-4 ${showVoiceTooltipSpace ? 'pt-10 sm:pt-10' : 'pt-2'} ${keyboardOffset > 0 ? 'pb-2' : 'pb-[calc(env(safe-area-inset-bottom)+0.875rem)] sm:pb-[calc(env(safe-area-inset-bottom)+1rem)]'}`}
-      style={
-        keyboardOffset > 0
-          ? {
-              transform: `translateY(-${keyboardOffset}px)`,
-              paddingBottom: '0.5rem',
-            }
-          : undefined
-      }
+      className={`relative shrink-0 border-t border-[var(--app-border)] bg-[var(--app-sidebar)] px-3 pb-[calc(env(safe-area-inset-bottom)+0.875rem)] sm:px-4 sm:pb-[calc(env(safe-area-inset-bottom)+1rem)] ${showVoiceTooltipSpace ? 'pt-10' : 'pt-2'}`}
     >
       {isRecording || voiceBusy ? (
         <VoiceRecordingBar
@@ -103,7 +73,7 @@ export function ChatComposer({
           onSend={onStopVoice ?? (() => undefined)}
         />
       ) : (
-        <div className="flex items-end gap-2 overflow-visible">
+        <div className="flex items-end gap-2">
           {onStartVoice ? (
             <VoiceButton
               allowed={voiceAllowed}
@@ -114,7 +84,6 @@ export function ChatComposer({
           ) : null}
           <div className="flex min-h-[48px] min-w-0 flex-1 items-center gap-2 rounded-xl bg-[var(--chat-input-bg)] px-3 py-1.5 ring-1 ring-[var(--app-border)]">
             <input
-              ref={inputRef}
               type="text"
               enterKeyHint="send"
               inputMode="text"
@@ -130,19 +99,6 @@ export function ChatComposer({
               }
               value={message}
               onChange={(e) => onMessageChange(e.target.value)}
-              onFocus={() => {
-                if (blurTimerRef.current != null) {
-                  window.clearTimeout(blurTimerRef.current);
-                  blurTimerRef.current = null;
-                }
-                onInputFocusChange?.(true);
-              }}
-              onBlur={() => {
-                blurTimerRef.current = window.setTimeout(() => {
-                  onInputFocusChange?.(false);
-                  blurTimerRef.current = null;
-                }, 120);
-              }}
               onKeyDown={(e) => {
                 if (e.key === 'Enter' && !e.shiftKey) {
                   e.preventDefault();
@@ -153,9 +109,9 @@ export function ChatComposer({
               disabled={disabled}
             />
             <TapButton
-              onPointerDown={preventInputBlur}
-              onMouseDown={preventInputBlur}
-              onTouchStart={preventInputBlur}
+              onPointerDown={keepInputFocused}
+              onMouseDown={keepInputFocused}
+              onTouchStart={keepInputFocused}
               onTap={handleSend}
               disabled={!canSend}
               className="app-touchable touch-target app-hover mb-0.5 shrink-0 rounded-lg btn-gradient px-3 py-2.5 text-xs font-semibold disabled:cursor-not-allowed disabled:opacity-40"
