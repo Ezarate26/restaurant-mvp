@@ -1,6 +1,6 @@
 'use client';
 
-import { useRef } from 'react';
+import { useEffect, useRef } from 'react';
 import { VoiceRecordingBar } from '@/components/chat/VoiceRecordingBar';
 import { VoiceButton } from '@/components/billing/VoiceButton';
 import { TapButton } from '@/components/ui/TapButton';
@@ -9,6 +9,7 @@ import { useVisualViewportOffset } from '@/lib/hooks/useVisualViewportOffset';
 type ChatComposerProps = {
   message: string;
   disabled?: boolean;
+  waitingForParticipant?: boolean;
   inputFocused?: boolean;
   onInputFocusChange?: (focused: boolean) => void;
   isRecording?: boolean;
@@ -35,6 +36,7 @@ function preventInputBlur(e: { preventDefault(): void }) {
 export function ChatComposer({
   message,
   disabled = false,
+  waitingForParticipant = false,
   inputFocused = false,
   onInputFocusChange,
   isRecording = false,
@@ -55,6 +57,19 @@ export function ChatComposer({
   const inputRef = useRef<HTMLInputElement>(null);
   const blurTimerRef = useRef<number | null>(null);
   const keyboardOffset = useVisualViewportOffset(inputFocused);
+  const prevKeyboardOffsetRef = useRef(0);
+
+  useEffect(() => {
+    if (
+      prevKeyboardOffsetRef.current > 0 &&
+      keyboardOffset === 0 &&
+      inputFocused
+    ) {
+      onInputFocusChange?.(false);
+    }
+    prevKeyboardOffsetRef.current = keyboardOffset;
+  }, [keyboardOffset, inputFocused, onInputFocusChange]);
+
   const canSend = !disabled && message.trim().length > 0;
   const showVoiceTooltipSpace =
     Boolean(onStartVoice) && !voiceAllowed && !isRecording && !voiceBusy;
@@ -108,7 +123,11 @@ export function ChatComposer({
               spellCheck
               className="min-w-0 flex-1 appearance-none border-0 bg-transparent py-2 text-left text-[16px] leading-[1.35] text-[var(--chat-input-text)] placeholder:text-[var(--chat-input-placeholder)] outline-none disabled:cursor-not-allowed disabled:opacity-50 sm:text-[15px] sm:leading-normal"
               style={{ WebkitAppearance: 'none' }}
-              placeholder="Escribe un mensaje en tu idioma…"
+              placeholder={
+                waitingForParticipant
+                  ? 'Esperando a que alguien se una al chat…'
+                  : 'Escribe un mensaje en tu idioma…'
+              }
               value={message}
               onChange={(e) => onMessageChange(e.target.value)}
               onFocus={() => {

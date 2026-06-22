@@ -144,7 +144,7 @@ export function ConversationChatView({
   const [shareCopied, setShareCopied] = useState(false);
   const [upgradeOpen, setUpgradeOpen] = useState(false);
   const [composerInputFocused, setComposerInputFocused] = useState(false);
-  const [messagesNearTop, setMessagesNearTop] = useState(false);
+  const [messagesAtTop, setMessagesAtTop] = useState(true);
   const isMobileViewport = useIsMobileViewport();
 
   const plan = usePlan();
@@ -177,14 +177,7 @@ export function ConversationChatView({
     viewerLanguage?.trim() || 'es'
   );
 
-  const hideMobileChatChrome =
-    isMobileViewport && composerInputFocused && !messagesNearTop;
-
-  useEffect(() => {
-    if (!composerInputFocused) {
-      setMessagesNearTop(false);
-    }
-  }, [composerInputFocused]);
+  const hideMobileChatChrome = isMobileViewport && !messagesAtTop;
 
   const chatReturnUrl =
     currentMemberId != null
@@ -237,10 +230,14 @@ export function ConversationChatView({
     onEnforceExpiry: onEnforceRoomTimer,
   });
 
-  const effectiveComposerDisabled =
-    composerDisabled || roomSession.roomTimeBlocked;
-
   const activeCount = members.filter((m) => !m.left_at).length;
+  const waitingForSecondParticipant = activeCount < 2;
+
+  const effectiveComposerDisabled =
+    composerDisabled ||
+    roomSession.roomTimeBlocked ||
+    waitingForSecondParticipant;
+
   const isActive = !effectiveComposerDisabled;
   const showFreeUpgrade =
     isOwner &&
@@ -448,13 +445,14 @@ export function ConversationChatView({
               onOpenInvite={() => setInviteOpen(true)}
               onShareInvite={() => void handleShare()}
               composerDisabled={effectiveComposerDisabled}
-              onScrollNearTopChange={setMessagesNearTop}
+              onScrollNearTopChange={setMessagesAtTop}
               preferInstantScroll={composerInputFocused}
             />
 
             <ChatComposer
               message={message}
               disabled={effectiveComposerDisabled}
+              waitingForParticipant={waitingForSecondParticipant}
               inputFocused={composerInputFocused}
               onInputFocusChange={setComposerInputFocused}
               isRecording={isRecordingVoice}
