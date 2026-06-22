@@ -18,6 +18,7 @@ export type AppMessages = {
     home: string;
     inviteQr: string;
     shareLink: string;
+    chatLanguage: string;
     createConversation: string;
     joinConversation: string;
     changePlan: string;
@@ -195,6 +196,7 @@ export const MESSAGES: Record<AppLang, AppMessages> = {
       home: 'Inicio',
       inviteQr: 'Invitar con QR',
       shareLink: 'Compartir enlace',
+      chatLanguage: 'Mi idioma en el chat',
       createConversation: 'Crear conversación',
       joinConversation: 'Unirse a conversación',
       changePlan: 'Cambiar plan',
@@ -437,6 +439,7 @@ export const MESSAGES: Record<AppLang, AppMessages> = {
       home: 'Home',
       inviteQr: 'Invite with QR',
       shareLink: 'Share link',
+      chatLanguage: 'My chat language',
       createConversation: 'Create conversation',
       joinConversation: 'Join conversation',
       changePlan: 'Change plan',

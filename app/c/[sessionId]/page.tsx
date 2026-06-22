@@ -270,6 +270,8 @@ function ConversationScreen({
         closedByMemberId={vm.conversation?.closed_by_member_id ?? null}
         onExtendSession={vm.extendSession}
         onEnforceRoomTimer={vm.enforceRoomTimer}
+        onSelectLanguage={(code) => void vm.selectLanguage(code)}
+        languageChangeBusy={vm.languageChangeBusy}
         showAnonymousProInvite={
           vm.showAnonymousProInvite ||
           (isAnonymousMember && sessionUnavailable)

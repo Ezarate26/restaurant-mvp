@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { type ReactNode } from 'react';
 import { ConversaBrand } from '@/components/brand/ConversaBrand';
+import { ChatLanguageSelect } from '@/components/chat/ChatLanguageSelect';
 import { JoinByCodeModal } from '@/components/conversation/JoinByCodeModal';
 import { SwitchConversationModal } from '@/components/conversation/SwitchConversationModal';
 import { type ActiveConversationSession } from '@/lib/utils/active-conversation-session';
@@ -22,6 +23,10 @@ type AppSidebarProps = {
   onShare?: () => void;
   onOpenQr?: () => void;
   composerDisabled?: boolean;
+  chatLanguage?: string;
+  chatLanguageOptions?: { code: string; name: string }[];
+  onChatLanguageChange?: (code: string) => void;
+  chatLanguageBusy?: boolean;
   activeSession?: ActiveConversationSession | null;
 };
 
@@ -41,6 +46,10 @@ type SidebarNavProps = {
   onRegisterClick: () => void;
   onLoginClick: () => void;
   onLogoutClick: () => void;
+  chatLanguage?: string;
+  chatLanguageOptions?: { code: string; name: string }[];
+  onChatLanguageChange?: (code: string) => void;
+  chatLanguageBusy?: boolean;
 };
 
 function SidebarShell({
@@ -84,6 +93,10 @@ function SidebarNav({
   onRegisterClick,
   onLoginClick,
   onLogoutClick,
+  chatLanguage,
+  chatLanguageOptions,
+  onChatLanguageChange,
+  chatLanguageBusy = false,
 }: SidebarNavProps) {
   const { t } = useAppLanguage();
   const navItemClass = uiNavItem;
@@ -137,6 +150,20 @@ function SidebarNav({
                   ) : null}
                 </div>
               </div>
+            ) : null}
+            {chatLanguage && chatLanguageOptions && onChatLanguageChange ? (
+              <ChatLanguageSelect
+                className="mx-0.5 mt-2"
+                value={chatLanguage}
+                options={chatLanguageOptions}
+                disabled={composerDisabled}
+                busy={chatLanguageBusy}
+                label={t.sidebar.chatLanguage}
+                onChange={(code) => {
+                  onChatLanguageChange(code);
+                  closeOnNav();
+                }}
+              />
             ) : null}
             <div className="my-2 h-px bg-[var(--app-border)]" />
           </>
@@ -266,6 +293,10 @@ export function AppSidebar({
   onShare,
   onOpenQr,
   composerDisabled = false,
+  chatLanguage,
+  chatLanguageOptions,
+  onChatLanguageChange,
+  chatLanguageBusy = false,
   activeSession: activeSessionProp = null,
 }: AppSidebarProps) {
   const { t } = useAppLanguage();
@@ -310,6 +341,10 @@ export function AppSidebar({
     onRegisterClick: () => handleAuthNav('/register', 'register'),
     onLoginClick: () => handleAuthNav('/login', 'login'),
     onLogoutClick: handleLogoutClick,
+    chatLanguage,
+    chatLanguageOptions,
+    onChatLanguageChange,
+    chatLanguageBusy,
   };
 
   return (

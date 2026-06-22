@@ -23,6 +23,9 @@ import { useConversationRoomLimits } from '@/lib/billing/useConversationRoomLimi
 import { markPendingRoomPassExtension } from '@/lib/billing/room-session.storage';
 import { useRoomSessionEnforcement } from '@/lib/billing/useRoomSessionEnforcement';
 import { resolveJoinShareUrl } from '@/lib/brand/site-url';
+import { getJoinLanguageOptions } from '@/lib/billing/language-access';
+import { useIsMobileViewport } from '@/lib/hooks/useIsMobileViewport';
+import { normalizeLanguageCode } from '@/constants/languages';
 
 export interface ConversationChatViewProps {
   conversationId: string;
@@ -75,6 +78,8 @@ export interface ConversationChatViewProps {
   closedByMemberId?: string | null;
   onExtendSession?: (extraMs: number) => void | Promise<void>;
   onEnforceRoomTimer?: () => void | Promise<void>;
+  onSelectLanguage?: (code: string) => void | Promise<void>;
+  languageChangeBusy?: boolean;
   showAnonymousProInvite?: boolean;
 }
 
@@ -129,6 +134,8 @@ export function ConversationChatView({
   closedByMemberId = null,
   onExtendSession,
   onEnforceRoomTimer,
+  onSelectLanguage,
+  languageChangeBusy = false,
   showAnonymousProInvite = false,
 }: ConversationChatViewProps) {
   const [leaveModalOpen, setLeaveModalOpen] = useState(false);
@@ -137,6 +144,8 @@ export function ConversationChatView({
   const [shareCopied, setShareCopied] = useState(false);
   const [upgradeOpen, setUpgradeOpen] = useState(false);
   const [composerInputFocused, setComposerInputFocused] = useState(false);
+  const [messagesNearTop, setMessagesNearTop] = useState(false);
+  const isMobileViewport = useIsMobileViewport();
 
   const plan = usePlan();
 
@@ -160,6 +169,22 @@ export function ConversationChatView({
     roomLimits?.durationMs ?? plan.getRoomDurationMsForRoom(conversationId);
   const roomUiMode = roomLimits?.uiMode ?? plan.uiMode;
   const voiceAllowed = plan.canUseVoiceInRoom(conversationId);
+  const chatLanguageOptions = getJoinLanguageOptions(
+    roomLimits?.allowAllLanguages ?? false,
+    plan.isAuthenticated
+  );
+  const chatLanguage = normalizeLanguageCode(
+    viewerLanguage?.trim() || 'es'
+  );
+
+  const hideMobileChatChrome =
+    isMobileViewport && composerInputFocused && !messagesNearTop;
+
+  useEffect(() => {
+    if (!composerInputFocused) {
+      setMessagesNearTop(false);
+    }
+  }, [composerInputFocused]);
 
   const chatReturnUrl =
     currentMemberId != null
@@ -299,6 +324,12 @@ export function ConversationChatView({
         onShare={() => void handleShare()}
         onOpenQr={() => setInviteOpen(true)}
         composerDisabled={effectiveComposerDisabled}
+        chatLanguage={onSelectLanguage ? chatLanguage : undefined}
+        chatLanguageOptions={onSelectLanguage ? chatLanguageOptions : undefined}
+        onChatLanguageChange={
+          onSelectLanguage ? (code) => void onSelectLanguage(code) : undefined
+        }
+        chatLanguageBusy={languageChangeBusy}
         activeSession={
           currentMemberId
             ? {
@@ -312,7 +343,8 @@ export function ConversationChatView({
       />
 
       <div className="flex min-h-0 min-w-0 flex-1 flex-col">
-        <ChatHeader
+        <div className={hideMobileChatChrome ? 'max-md:hidden' : undefined}>
+          <ChatHeader
           conversationId={conversationId}
           headerLabel={headerLabel}
           members={members}
@@ -397,6 +429,7 @@ export function ConversationChatView({
             </TapButton>
           </div>
         ) : null}
+        </div>
 
         <div className="flex min-h-0 flex-1 overflow-hidden">
           <main className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
@@ -415,7 +448,8 @@ export function ConversationChatView({
               onOpenInvite={() => setInviteOpen(true)}
               onShareInvite={() => void handleShare()}
               composerDisabled={effectiveComposerDisabled}
-              suppressAutoScroll={composerInputFocused}
+              onScrollNearTopChange={setMessagesNearTop}
+              preferInstantScroll={composerInputFocused}
             />
 
             <ChatComposer
