@@ -9,6 +9,10 @@ import { useChatBackExitGuard } from '@/lib/hooks/useChatBackExitGuard';
 import { AUTH_HOME_PATH } from '@/lib/constants/routes';
 import { clearActiveConversationSession } from '@/lib/utils/active-conversation-session';
 import { markSessionEndedByTime } from '@/lib/utils/session-ended-flash.storage';
+import {
+  enforceConversationRoomTimer,
+  fetchConversationRoomSession,
+} from '@/lib/billing/conversation-room-session-client';
 import { fetchMemberById } from '@/lib/model/conversation-members.repository';
 import { fetchConversationById } from '@/lib/model/conversations-table.repository';
 import { supabase } from '@/lib/supabase';
@@ -85,6 +89,15 @@ function ConversationScreen({
       await redirectAfterLeave({ sessionEndedByTime: true });
       return true;
     }
+
+    const roomSession = await fetchConversationRoomSession(conversationId);
+    if (roomSession?.expired) {
+      await enforceConversationRoomTimer(conversationId);
+      if (!mem.user_id) return true;
+      await redirectAfterLeave({ sessionEndedByTime: true });
+      return true;
+    }
+
     return false;
   }, [conversationId, memberId, redirectAfterLeave]);
 
@@ -155,6 +168,11 @@ function ConversationScreen({
     (vm.error === 'SESSION_ENDED' ||
       vm.conversation?.status === 'closed' ||
       Boolean(vm.member?.left_at));
+
+  useEffect(() => {
+    if (vm.isLoading) return;
+    void redirectIfSessionEnded();
+  }, [vm.isLoading, redirectIfSessionEnded]);
 
   useEffect(() => {
     if (!sessionUnavailable) return;
@@ -244,12 +262,14 @@ function ConversationScreen({
         onStopVoice={vm.sendVoiceMessage}
         onCancelVoice={vm.cancelVoiceRecording}
         conversationCreatedAt={vm.conversation?.created_at ?? null}
+        roomTimerStartedAt={vm.conversation?.room_timer_started_at ?? null}
         sessionExtraMs={vm.sessionExtraMs}
         ownerDisplayName={vm.ownerDisplayName}
         closerDisplayName={vm.closerDisplayName}
         conversationStatus={vm.conversation?.status ?? null}
         closedByMemberId={vm.conversation?.closed_by_member_id ?? null}
         onExtendSession={vm.extendSession}
+        onEnforceRoomTimer={vm.enforceRoomTimer}
         showAnonymousProInvite={
           vm.showAnonymousProInvite ||
           (isAnonymousMember && sessionUnavailable)

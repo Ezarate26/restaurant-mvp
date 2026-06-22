@@ -19,6 +19,10 @@ import {
 } from '@/lib/model/conversation-members.repository';
 import { applyTranscriptionFallbacksForMessages } from '@/lib/model/voice-transcription-fallback';
 import { requestProJoinRoomBoost } from '@/lib/billing/conversation-boost-client';
+import {
+  enforceConversationRoomTimer,
+  fetchConversationRoomSession,
+} from '@/lib/billing/conversation-room-session-client';
 import { joinInviteUrl } from '@/lib/brand/site-url';
 import {
   clearActiveConversationSession,
@@ -91,25 +95,55 @@ export function useConversationChatViewModel({
   }, [conversationLanguages]);
 
   useEffect(() => {
+    const activeCount = members.filter((m) => !m.left_at).length;
+    if (activeCount < 2 || conversation?.room_timer_started_at) return;
+    void fetchConversationRoomSession(conversationId).then((session) => {
+      if (!session?.timerStartedAt) return;
+      setConversation((prev) =>
+        prev
+          ? { ...prev, room_timer_started_at: session.timerStartedAt }
+          : prev
+      );
+    });
+  }, [members, conversation?.room_timer_started_at, conversationId]);
+
+  useEffect(() => {
     let cancelled = false;
     setIsLoading(true);
     setError(null);
 
     void (async () => {
       try {
-        const [conv, mem, mems, msgs] = await Promise.all([
+        const [convRow, mem, mems, msgs] = await Promise.all([
           fetchConversationById(supabase, conversationId),
           fetchMemberById(supabase, memberId),
           fetchActiveMembersByConversation(supabase, conversationId),
           fetchMessagesByConversation(supabase, conversationId),
         ]);
         if (cancelled) return;
-        if (!conv || !mem || mem.left_at || conv.status === 'closed') {
+        if (!convRow || !mem || mem.left_at || convRow.status === 'closed') {
           clearActiveConversationSession();
           setError('SESSION_ENDED');
           setIsLoading(false);
           return;
         }
+
+        let conv = convRow;
+        const roomSession = await fetchConversationRoomSession(conversationId);
+        if (cancelled) return;
+
+        if (roomSession?.timerStartedAt) {
+          conv = { ...conv, room_timer_started_at: roomSession.timerStartedAt };
+        }
+
+        if (roomSession?.expired) {
+          await enforceConversationRoomTimer(conversationId);
+          clearActiveConversationSession();
+          setError('SESSION_ENDED');
+          setIsLoading(false);
+          return;
+        }
+
         setConversation(conv);
         setMember(mem);
         setMembers(mems);
@@ -438,6 +472,24 @@ export function useConversationChatViewModel({
     if (updated) setConversation(updated);
   }, [conversation?.id, isOwner]);
 
+  const enforceRoomTimer = useCallback(async () => {
+    if (!conversation?.id) return;
+    const status = await enforceConversationRoomTimer(conversation.id);
+    if (status === 'closed' || status === 'already_closed') {
+      const now = new Date().toISOString();
+      setConversation((prev) =>
+        prev
+          ? {
+              ...prev,
+              status: 'closed',
+              closed_at: now,
+            }
+          : prev
+      );
+      setMembers([]);
+    }
+  }, [conversation?.id]);
+
   const headerLabel =
     conversation?.title?.trim() ||
     `Conversación · ${members.length} participante${members.length === 1 ? '' : 's'}`;
@@ -491,6 +543,7 @@ export function useConversationChatViewModel({
     closerDisplayName,
     extendSession,
     grantFreeSessionBonus,
+    enforceRoomTimer,
     showStartNewSession: conversation?.status === 'closed',
     newSessionBusy: false,
   };

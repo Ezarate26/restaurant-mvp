@@ -4,10 +4,13 @@ import { useRef } from 'react';
 import { VoiceRecordingBar } from '@/components/chat/VoiceRecordingBar';
 import { VoiceButton } from '@/components/billing/VoiceButton';
 import { TapButton } from '@/components/ui/TapButton';
+import { useVisualViewportOffset } from '@/lib/hooks/useVisualViewportOffset';
 
 type ChatComposerProps = {
   message: string;
   disabled?: boolean;
+  inputFocused?: boolean;
+  onInputFocusChange?: (focused: boolean) => void;
   isRecording?: boolean;
   voiceBusy?: boolean;
   waveformLevels?: number[];
@@ -32,6 +35,8 @@ function preventInputBlur(e: { preventDefault(): void }) {
 export function ChatComposer({
   message,
   disabled = false,
+  inputFocused = false,
+  onInputFocusChange,
   isRecording = false,
   voiceBusy = false,
   waveformLevels = [],
@@ -48,32 +53,28 @@ export function ChatComposer({
   onVoiceUpgrade,
 }: ChatComposerProps) {
   const inputRef = useRef<HTMLInputElement>(null);
+  const blurTimerRef = useRef<number | null>(null);
+  const keyboardOffset = useVisualViewportOffset(inputFocused);
   const canSend = !disabled && message.trim().length > 0;
   const showVoiceTooltipSpace =
     Boolean(onStartVoice) && !voiceAllowed && !isRecording && !voiceBusy;
 
-  const keepInputFocused = () => {
-    const input = inputRef.current;
-    if (!input) return;
-    try {
-      input.focus({ preventScroll: true });
-    } catch {
-      input.focus();
-    }
-  };
-
   const handleSend = () => {
     if (!canSend) return;
     onSend();
-    window.requestAnimationFrame(() => {
-      keepInputFocused();
-      window.requestAnimationFrame(keepInputFocused);
-    });
   };
 
   return (
     <div
-      className={`relative z-10 shrink-0 overflow-visible bg-[var(--app-sidebar)] px-3 pb-[calc(env(safe-area-inset-bottom)+0.875rem)] sm:px-4 sm:pb-[calc(env(safe-area-inset-bottom)+1rem)] ${showVoiceTooltipSpace ? 'pt-10 sm:pt-10' : 'pt-2'}`}
+      className={`relative z-20 shrink-0 overflow-visible border-t border-[var(--app-border)] bg-[var(--app-sidebar)] px-3 sm:px-4 ${showVoiceTooltipSpace ? 'pt-10 sm:pt-10' : 'pt-2'} ${keyboardOffset > 0 ? 'pb-2' : 'pb-[calc(env(safe-area-inset-bottom)+0.875rem)] sm:pb-[calc(env(safe-area-inset-bottom)+1rem)]'}`}
+      style={
+        keyboardOffset > 0
+          ? {
+              transform: `translateY(-${keyboardOffset}px)`,
+              paddingBottom: '0.5rem',
+            }
+          : undefined
+      }
     >
       {isRecording || voiceBusy ? (
         <VoiceRecordingBar
@@ -110,6 +111,19 @@ export function ChatComposer({
               placeholder="Escribe un mensaje en tu idioma…"
               value={message}
               onChange={(e) => onMessageChange(e.target.value)}
+              onFocus={() => {
+                if (blurTimerRef.current != null) {
+                  window.clearTimeout(blurTimerRef.current);
+                  blurTimerRef.current = null;
+                }
+                onInputFocusChange?.(true);
+              }}
+              onBlur={() => {
+                blurTimerRef.current = window.setTimeout(() => {
+                  onInputFocusChange?.(false);
+                  blurTimerRef.current = null;
+                }, 120);
+              }}
               onKeyDown={(e) => {
                 if (e.key === 'Enter' && !e.shiftKey) {
                   e.preventDefault();

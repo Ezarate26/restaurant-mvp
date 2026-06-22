@@ -19,6 +19,10 @@ import {
   fetchActiveMembersByConversation,
   insertConversationMember,
 } from '@/lib/model/conversation-members.repository';
+import {
+  enforceConversationRoomTimer,
+  setRoomTimerStartedAtIfNull,
+} from '@/lib/billing/room-timer.server';
 import { fetchConversationByInviteCode } from '@/lib/model/conversations-table.repository';
 import { getUserIdFromRequest } from '@/lib/billing/server-auth';
 import { createSupabaseServiceRole } from '@/lib/supabase/service';
@@ -88,6 +92,18 @@ export async function POST(request: Request) {
       );
     }
 
+    const timerStatus = await enforceConversationRoomTimer(conversation.id);
+    if (timerStatus === 'closed' || timerStatus === 'already_closed') {
+      return NextResponse.json(
+        {
+          error:
+            'El tiempo de esta sala se agotó. Inicia un nuevo chat desde el inicio.',
+          code: 'ROOM_TIME_EXPIRED',
+        },
+        { status: 410 }
+      );
+    }
+
     let joinerUserId: string | null = userId;
     if (joinerUserId) {
       await ensurePublicUserById(service, joinerUserId);
@@ -123,6 +139,7 @@ export async function POST(request: Request) {
       : clampLanguageToFree(preferredLanguage);
     assertLanguageAllowed(language, joinerAllowsAll);
 
+    const joiningNewMember = !existingMember;
     const member =
       existingMember ??
       (await insertConversationMember(service, {
@@ -133,6 +150,10 @@ export async function POST(request: Request) {
         role: 'member',
         userId: joinerUserId,
       }));
+
+    if (joiningNewMember && activeMembers.length === 1) {
+      await setRoomTimerStartedAtIfNull(service, conversation.id);
+    }
 
     if (joinerUserId) {
       try {

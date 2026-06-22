@@ -2,29 +2,35 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { ConversationMember } from '@/lib/model/types';
+import { computeRoomRemainingMs } from '@/lib/billing/room-timer';
 import { resolveRoomTimerStartedAt } from '@/lib/billing/resolve-room-timer-started-at';
 import { useRoomTimer } from '@/lib/billing/useRoomTimer';
 
-function computeRemainingMs(startedAt: string, totalMs: number): number {
-  const started = Date.parse(startedAt);
-  if (!Number.isFinite(started)) return totalMs;
-  return Math.max(0, started + totalMs - Date.now());
+function computeRemainingFromStart(
+  startedAt: string,
+  durationMs: number,
+  extraMs: number
+): number {
+  return (
+    computeRoomRemainingMs(startedAt, durationMs, extraMs) ?? durationMs + extraMs
+  );
 }
 
 export function useRoomParticipantTimer(
   members: Pick<ConversationMember, 'joined_at' | 'left_at'>[],
   durationMs: number,
-  extraMs = 0
+  extraMs = 0,
+  persistedStartedAt?: string | null
 ) {
   const totalMs = durationMs + extraMs;
   const activeCount = useMemo(
     () => members.filter((m) => !m.left_at).length,
     [members]
   );
-  const participantStartedAt = useMemo(
-    () => resolveRoomTimerStartedAt(members),
-    [members]
-  );
+  const participantStartedAt = useMemo(() => {
+    if (persistedStartedAt) return persistedStartedAt;
+    return resolveRoomTimerStartedAt(members);
+  }, [persistedStartedAt, members]);
 
   const [pausedRemainingMs, setPausedRemainingMs] = useState<number | null>(
     null
@@ -34,6 +40,7 @@ export function useRoomParticipantTimer(
   );
   const prevActiveCountRef = useRef(activeCount);
   const runningStartedAtRef = useRef<string | null>(null);
+  const pauseInitializedRef = useRef(false);
 
   const effectiveStartedAt = syntheticStartedAt ?? participantStartedAt;
 
@@ -44,12 +51,28 @@ export function useRoomParticipantTimer(
   }, [activeCount, effectiveStartedAt]);
 
   useEffect(() => {
+    if (
+      pauseInitializedRef.current ||
+      activeCount >= 2 ||
+      !participantStartedAt
+    ) {
+      return;
+    }
+    pauseInitializedRef.current = true;
+    setPausedRemainingMs(
+      computeRemainingFromStart(participantStartedAt, durationMs, extraMs)
+    );
+  }, [activeCount, participantStartedAt, totalMs]);
+
+  useEffect(() => {
     const prev = prevActiveCountRef.current;
 
     if (prev >= 2 && activeCount < 2) {
       const started = runningStartedAtRef.current;
       if (started) {
-        setPausedRemainingMs(computeRemainingMs(started, totalMs));
+        setPausedRemainingMs(
+          computeRemainingFromStart(started, durationMs, extraMs)
+        );
         setSyntheticStartedAt(null);
       }
     }
@@ -64,7 +87,10 @@ export function useRoomParticipantTimer(
   }, [activeCount, totalMs, pausedRemainingMs]);
 
   const waitingForParticipants =
-    activeCount < 2 && pausedRemainingMs == null && syntheticStartedAt == null;
+    activeCount < 2 &&
+    pausedRemainingMs == null &&
+    syntheticStartedAt == null &&
+    !participantStartedAt;
 
   const holdRemainingMs = waitingForParticipants
     ? totalMs
@@ -86,7 +112,11 @@ export function useRoomParticipantTimer(
     durationMs,
     extraMs,
     holdRemainingMs != null
-      ? { holdRemainingMs, holdProgress: holdProgress ?? 0 }
+      ? {
+          holdRemainingMs,
+          holdProgress: holdProgress ?? 0,
+          holdWaiting: waitingForParticipants,
+        }
       : undefined
   );
 

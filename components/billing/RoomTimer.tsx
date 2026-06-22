@@ -5,6 +5,7 @@ import { useRoomParticipantTimer } from '@/lib/billing/useRoomParticipantTimer';
 
 type RoomTimerProps = {
   members: Pick<ConversationMember, 'joined_at' | 'left_at'>[];
+  roomTimerStartedAt?: string | null;
   durationMs: number;
   extraMs?: number;
   compact?: boolean;
@@ -12,12 +13,13 @@ type RoomTimerProps = {
 
 export function RoomTimer({
   members,
+  roomTimerStartedAt = null,
   durationMs,
   extraMs = 0,
   compact = false,
 }: RoomTimerProps) {
   const { label, expired, progress, remainingMs, waitingForParticipants } =
-    useRoomParticipantTimer(members, durationMs, extraMs);
+    useRoomParticipantTimer(members, durationMs, extraMs, roomTimerStartedAt);
 
   const displayLabel = waitingForParticipants ? `${label} · en espera` : label;
 

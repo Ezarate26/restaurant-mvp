@@ -67,12 +67,14 @@ export interface ConversationChatViewProps {
   onStopVoice?: () => void | Promise<void>;
   onCancelVoice?: () => void;
   conversationCreatedAt?: string | null;
+  roomTimerStartedAt?: string | null;
   sessionExtraMs?: number;
   ownerDisplayName?: string;
   closerDisplayName?: string;
   conversationStatus?: string | null;
   closedByMemberId?: string | null;
   onExtendSession?: (extraMs: number) => void | Promise<void>;
+  onEnforceRoomTimer?: () => void | Promise<void>;
   showAnonymousProInvite?: boolean;
 }
 
@@ -119,12 +121,14 @@ export function ConversationChatView({
   onStopVoice,
   onCancelVoice,
   conversationCreatedAt = null,
+  roomTimerStartedAt = null,
   sessionExtraMs = 0,
   ownerDisplayName = 'el propietario',
   closerDisplayName = 'El propietario',
   conversationStatus = 'active',
   closedByMemberId = null,
   onExtendSession,
+  onEnforceRoomTimer,
   showAnonymousProInvite = false,
 }: ConversationChatViewProps) {
   const [leaveModalOpen, setLeaveModalOpen] = useState(false);
@@ -132,6 +136,7 @@ export function ConversationChatView({
   const [inviteOpen, setInviteOpen] = useState(false);
   const [shareCopied, setShareCopied] = useState(false);
   const [upgradeOpen, setUpgradeOpen] = useState(false);
+  const [composerInputFocused, setComposerInputFocused] = useState(false);
 
   const plan = usePlan();
 
@@ -194,6 +199,7 @@ export function ConversationChatView({
   const roomSession = useRoomSessionEnforcement({
     conversationId,
     members,
+    roomTimerStartedAt,
     durationMs: roomDurationMs,
     sessionExtraMs,
     uiMode: roomUiMode,
@@ -203,6 +209,7 @@ export function ConversationChatView({
     onEndSession: handleRoomSessionEnd,
     onExtendSession: onExtendSession ?? (async () => undefined),
     onFreeGuestExpire: handleFreeGuestExpire,
+    onEnforceExpiry: onEnforceRoomTimer,
   });
 
   const effectiveComposerDisabled =
@@ -356,6 +363,7 @@ export function ConversationChatView({
           />
           <RoomTimer
             members={members}
+            roomTimerStartedAt={roomTimerStartedAt}
             durationMs={roomDurationMs}
             extraMs={sessionExtraMs}
             compact
@@ -390,8 +398,8 @@ export function ConversationChatView({
           </div>
         ) : null}
 
-        <div className="flex min-h-0 flex-1 overflow-x-hidden overflow-y-visible">
-          <main className="flex min-h-0 min-w-0 flex-1 flex-col overflow-visible">
+        <div className="flex min-h-0 flex-1 overflow-hidden">
+          <main className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
             <ChatMessagesPane
               messages={messages}
               currentMemberId={currentMemberId}
@@ -407,11 +415,14 @@ export function ConversationChatView({
               onOpenInvite={() => setInviteOpen(true)}
               onShareInvite={() => void handleShare()}
               composerDisabled={effectiveComposerDisabled}
+              suppressAutoScroll={composerInputFocused}
             />
 
             <ChatComposer
               message={message}
               disabled={effectiveComposerDisabled}
+              inputFocused={composerInputFocused}
+              onInputFocusChange={setComposerInputFocused}
               isRecording={isRecordingVoice}
               voiceBusy={voiceBusy}
               waveformLevels={waveformLevels}
