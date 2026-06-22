@@ -24,6 +24,7 @@ import {
 import { ActiveSessionBlockedNotice } from '@/components/conversation/ActiveSessionBlockedNotice';
 import { getCreateLanguageOptions } from '@/lib/billing/language-access';
 import { shouldShowFreePlanLimitsHint } from '@/lib/billing/show-free-plan-hint';
+import { FREE_LIMITS } from '@/lib/billing/constants';
 import { usePlan } from '@/lib/billing/PlanProvider';
 import { fetchUserById } from '@/lib/model/profiles.repository';
 import { normalizeLanguageCode } from '@/constants/languages';
@@ -147,7 +148,7 @@ export default function CreateConversationPage() {
           ? ' Sin cuenta: el límite se aplica a este navegador. '
           : ' ';
         setDailyHint(
-          `Plan Free:${guestNote}Te quedan ${usage.remaining} de ${usage.limit} conversaciones en las próximas 24 h (desde tu primera charla del período).`
+          `Plan Free:${guestNote}Te quedan ${usage.remaining} de ${usage.limit} chats (${FREE_LIMITS.roomDurationMinutes} min cada uno) en las próximas 24 h (desde tu primera charla del período).`
         );
       })
       .catch(() => {

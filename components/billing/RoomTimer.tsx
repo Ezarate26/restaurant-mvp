@@ -1,25 +1,25 @@
 'use client';
 
-import { useRoomTimer } from '@/lib/billing/useRoomTimer';
+import type { ConversationMember } from '@/lib/model/types';
+import { useRoomParticipantTimer } from '@/lib/billing/useRoomParticipantTimer';
 
 type RoomTimerProps = {
-  createdAt: string | null | undefined;
+  members: Pick<ConversationMember, 'joined_at' | 'left_at'>[];
   durationMs: number;
   extraMs?: number;
   compact?: boolean;
 };
 
 export function RoomTimer({
-  createdAt,
+  members,
   durationMs,
   extraMs = 0,
   compact = false,
 }: RoomTimerProps) {
-  const { label, expired, progress, remainingMs } = useRoomTimer(
-    createdAt,
-    durationMs,
-    extraMs
-  );
+  const { label, expired, progress, remainingMs, waitingForParticipants } =
+    useRoomParticipantTimer(members, durationMs, extraMs);
+
+  const displayLabel = waitingForParticipants ? `${label} · en espera` : label;
 
   const urgent = !expired && remainingMs < 2 * 60_000;
 
@@ -33,10 +33,14 @@ export function RoomTimer({
               ? 'bg-[var(--app-warning)]/15 text-[var(--app-warning)]'
               : 'bg-[var(--app-hover-bg)] text-[var(--app-muted)]'
         }`}
-        title="Tiempo restante de la sala"
+        title={
+          waitingForParticipants
+            ? 'El tiempo empieza cuando se unan al menos 2 personas'
+            : 'Tiempo restante de la sala'
+        }
       >
         <span className="inline-block h-1.5 w-1.5 rounded-full bg-current" />
-        {label}
+        {displayLabel}
       </span>
     );
   }
@@ -50,7 +54,7 @@ export function RoomTimer({
             expired ? 'text-[var(--app-danger)]' : urgent ? 'text-[var(--app-warning)]' : ''
           }`}
         >
-          {label}
+          {displayLabel}
         </span>
       </div>
       <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-[var(--app-hover-bg)]">

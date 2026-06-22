@@ -24,6 +24,11 @@ type ChatComposerProps = {
   onVoiceUpgrade?: () => void;
 };
 
+/** Evita que el botón Enviar robe el foco y cierre el teclado en móvil. */
+function preventInputBlur(e: { preventDefault(): void }) {
+  e.preventDefault();
+}
+
 export function ChatComposer({
   message,
   disabled = false,
@@ -47,10 +52,23 @@ export function ChatComposer({
   const showVoiceTooltipSpace =
     Boolean(onStartVoice) && !voiceAllowed && !isRecording && !voiceBusy;
 
+  const keepInputFocused = () => {
+    const input = inputRef.current;
+    if (!input) return;
+    try {
+      input.focus({ preventScroll: true });
+    } catch {
+      input.focus();
+    }
+  };
+
   const handleSend = () => {
     if (!canSend) return;
     onSend();
-    window.requestAnimationFrame(() => inputRef.current?.focus());
+    window.requestAnimationFrame(() => {
+      keepInputFocused();
+      window.requestAnimationFrame(keepInputFocused);
+    });
   };
 
   return (
@@ -83,6 +101,7 @@ export function ChatComposer({
               ref={inputRef}
               type="text"
               enterKeyHint="send"
+              inputMode="text"
               autoComplete="off"
               autoCorrect="on"
               spellCheck
@@ -101,6 +120,9 @@ export function ChatComposer({
               disabled={disabled}
             />
             <TapButton
+              onPointerDown={preventInputBlur}
+              onMouseDown={preventInputBlur}
+              onTouchStart={preventInputBlur}
               onTap={handleSend}
               disabled={!canSend}
               className="app-touchable touch-target app-hover mb-0.5 shrink-0 rounded-lg btn-gradient px-3 py-2.5 text-xs font-semibold disabled:cursor-not-allowed disabled:opacity-40"

@@ -1,6 +1,7 @@
 import {
   FREE_DAILY_CONVERSATION_LIMIT,
   FREE_DAILY_WINDOW_MS,
+  FREE_LIMITS,
 } from '@/lib/billing/constants';
 
 export type FreeDailyUsageSnapshot = {
@@ -67,5 +68,5 @@ export function formatFreeDailyLimitMessage(
       })
     : 'pronto';
 
-  return `Has alcanzado el límite de ${usage.limit} conversaciones gratuitas en 24 horas. Podrás crear otra sala después del ${resetLabel}, o pásate a Pro para conversaciones ilimitadas.`;
+  return `Has alcanzado el límite de ${usage.limit} chats gratuitos en 24 horas (${FREE_LIMITS.roomDurationMinutes} min por chat). Podrás crear otra sala después del ${resetLabel}, o pásate a Pro para chats ilimitados.`;
 }
