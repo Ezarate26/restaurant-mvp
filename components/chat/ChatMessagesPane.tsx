@@ -27,7 +27,7 @@ type ChatMessagesPaneProps = {
   onOpenInvite?: () => void;
   onShareInvite?: () => void;
   composerDisabled?: boolean;
-  onScrollNearTopChange?: (nearTop: boolean) => void;
+  onScrollNearTopChange?: (atTop: boolean) => void;
   preferInstantScroll?: boolean;
 };
 
@@ -109,7 +109,25 @@ export function ChatMessagesPane({
     const el = scrollContainerRef.current;
     if (!el) return;
     el.scrollTo({ top: el.scrollHeight, behavior });
+    window.requestAnimationFrame(() => {
+      onScrollNearTopChange?.(el.scrollTop < 48);
+    });
   };
+
+  const reportScrollPosition = () => {
+    const el = scrollContainerRef.current;
+    if (!el) return;
+    onScrollNearTopChange?.(el.scrollTop < 48);
+  };
+
+  useEffect(() => {
+    reportScrollPosition();
+    const el = scrollContainerRef.current;
+    if (!el || typeof ResizeObserver === 'undefined') return;
+    const ro = new ResizeObserver(() => reportScrollPosition());
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [messages.length, activityEvents.length, showSoloOwnerInvite]);
 
   useEffect(() => {
     if (showSoloOwnerInvite) return;
