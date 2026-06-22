@@ -23,6 +23,7 @@ import {
   enforceConversationRoomTimer,
   fetchConversationRoomSession,
 } from '@/lib/billing/conversation-room-session-client';
+import { createOptimisticTextMessage } from '@/lib/messaging/optimistic-message';
 import { joinInviteUrl } from '@/lib/brand/site-url';
 import {
   clearActiveConversationSession,
@@ -229,38 +230,59 @@ export function useConversationChatViewModel({
     [member?.id, conversationId, hydrateViewerMessages]
   );
 
-  const sendMessage = useCallback(async () => {
+  const sendMessage = useCallback(() => {
     const body = text.trim();
     if (!body || !conversation || !member) return;
     if (conversation.status === 'closed' || member.left_at) return;
     if (sendingMessageRef.current) return;
 
-    sendingMessageRef.current = true;
-    setText('');
-    notifyTypingStop();
-
     const original = normalizeLanguageCode(
       member.preferred_language?.trim() || preferredLanguage || 'es'
     );
 
-    try {
-      const { messages: updated } = await handleSendMessage({
-        insertRow: {
-          conversation_id: conversation.id,
-          member_id: member.id,
-          content: body,
-          original_language: original,
-        },
-        latestLanguagesRef,
-      });
-      setMessages(updated);
-    } catch (e) {
-      setText((prev) => (prev.trim().length > 0 ? prev : body));
-      setError(e instanceof Error ? e.message : 'No se pudo enviar el mensaje');
-    } finally {
-      sendingMessageRef.current = false;
-    }
-  }, [text, conversation, member, preferredLanguage, handleSendMessage, notifyTypingStop]);
+    const optimistic = createOptimisticTextMessage({
+      conversationId: conversation.id,
+      memberId: member.id,
+      content: body,
+      originalLanguage: original,
+      displayName: member.display_name,
+    });
+
+    sendingMessageRef.current = true;
+    setText('');
+    notifyTypingStop();
+    setMessages((prev) => [...prev, optimistic]);
+
+    void (async () => {
+      try {
+        const { messages: updated } = await handleSendMessage({
+          insertRow: {
+            conversation_id: conversation.id,
+            member_id: member.id,
+            content: body,
+            original_language: original,
+          },
+          latestLanguagesRef,
+        });
+        setMessages(updated);
+      } catch (e) {
+        setMessages((prev) => prev.filter((m) => m.id !== optimistic.id));
+        setText((prev) => (prev.trim().length > 0 ? prev : body));
+        setError(
+          e instanceof Error ? e.message : 'No se pudo enviar el mensaje'
+        );
+      } finally {
+        sendingMessageRef.current = false;
+      }
+    })();
+  }, [
+    text,
+    conversation,
+    member,
+    preferredLanguage,
+    handleSendMessage,
+    notifyTypingStop,
+  ]);
 
   const sendVoiceMessage = useCallback(async () => {
     if (!conversation || !member) return;
