@@ -1,6 +1,10 @@
 'use client';
 
 import Link from 'next/link';
+import {
+  FREE_DAILY_CONVERSATION_LIMIT,
+  FREE_LIMITS,
+} from '@/lib/billing/constants';
 
 type FreePlanLimitsHintProps = {
   variant?: 'create' | 'join';
@@ -11,10 +15,12 @@ export function FreePlanLimitsHint({
   variant = 'create',
   className = '',
 }: FreePlanLimitsHintProps) {
+  const mins = FREE_LIMITS.roomDurationMinutes;
+  const daily = FREE_DAILY_CONVERSATION_LIMIT;
   const intro =
     variant === 'create'
-      ? 'Plan Free: Español e Inglés, hasta 2 personas por sala (tú y un invitado).'
-      : 'Plan Free: esta sala admite Español e Inglés y hasta 2 participantes.';
+      ? `Plan Free: Español ↔ Inglés, hasta ${daily} chats por día de ${mins} minutos cada uno, hasta 2 personas por sala.`
+      : `Plan Free: esta sala admite Español ↔ Inglés, hasta ${mins} minutos por chat y 2 participantes.`;
 
   return (
     <div

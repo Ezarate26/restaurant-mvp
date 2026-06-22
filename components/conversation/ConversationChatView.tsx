@@ -193,7 +193,7 @@ export function ConversationChatView({
 
   const roomSession = useRoomSessionEnforcement({
     conversationId,
-    createdAt: conversationCreatedAt,
+    members,
     durationMs: roomDurationMs,
     sessionExtraMs,
     uiMode: roomUiMode,
@@ -355,7 +355,7 @@ export function ConversationChatView({
             compact
           />
           <RoomTimer
-            createdAt={conversationCreatedAt}
+            members={members}
             durationMs={roomDurationMs}
             extraMs={sessionExtraMs}
             compact

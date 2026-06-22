@@ -8,13 +8,14 @@ import {
   ROOM_PASS_DURATION_MINUTES,
 } from '@/lib/billing/constants';
 import { consumePendingRoomPassExtension } from '@/lib/billing/room-session.storage';
-import { useRoomTimer } from '@/lib/billing/useRoomTimer';
+import type { ConversationMember } from '@/lib/model/types';
+import { useRoomParticipantTimer } from '@/lib/billing/useRoomParticipantTimer';
 
 export type FreeSessionEndedKind = 'owner-upgrade' | 'guest-ended' | null;
 
 type UseRoomSessionEnforcementArgs = {
   conversationId: string;
-  createdAt: string | null | undefined;
+  members: Pick<ConversationMember, 'joined_at' | 'left_at'>[];
   durationMs: number;
   sessionExtraMs: number;
   uiMode: BillingUiMode;
@@ -28,7 +29,7 @@ type UseRoomSessionEnforcementArgs = {
 
 export function useRoomSessionEnforcement({
   conversationId,
-  createdAt,
+  members,
   durationMs,
   sessionExtraMs,
   uiMode,
@@ -51,7 +52,7 @@ export function useRoomSessionEnforcement({
   const onFreeGuestExpireRef = useRef(onFreeGuestExpire);
   onFreeGuestExpireRef.current = onFreeGuestExpire;
 
-  const timer = useRoomTimer(createdAt, durationMs, sessionExtraMs);
+  const timer = useRoomParticipantTimer(members, durationMs, sessionExtraMs);
 
   useEffect(() => {
     if (

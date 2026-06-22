@@ -11,7 +11,7 @@ import {
   uiModalText,
   uiModalTitle,
 } from '@/components/ui/ui-classes';
-import { PRO_TRIAL_DAYS } from '@/lib/billing/constants';
+import { PRO_TRIAL_DAYS, FREE_LIMITS, FREE_DAILY_CONVERSATION_LIMIT } from '@/lib/billing/constants';
 
 type CheckoutBusy = 'pro' | 'room_pass' | null;
 
@@ -119,7 +119,7 @@ export function UpgradeModal({
             {isChatEnded
               ? 'Pásate a Pro ($9.99/mes) para salas de 60 minutos, voz con traducción y todos los idiomas, o compra un pase solo para esta sala ($2.99 USD, pago único con tarjeta).'
               : isFreeTime
-                ? 'Las salas gratuitas duran 10 minutos. Pásate a Pro ($9.99/mes) para salas de 60 minutos, voz con traducción y todos los idiomas, o compra un pase solo para esta sala ($2.99 USD, pago único con tarjeta).'
+                ? `Las salas gratuitas duran ${FREE_LIMITS.roomDurationMinutes} minutos por chat (hasta ${FREE_DAILY_CONVERSATION_LIMIT} chats al día). Pásate a Pro ($9.99/mes) para salas de 60 minutos, voz con traducción y todos los idiomas, o compra un pase solo para esta sala ($2.99 USD, pago único con tarjeta).`
                 : 'Los mensajes de voz con traducción en tiempo real están disponibles en Pro ($9.99/mes USD) o con un pase por sala ($2.99 USD, pago único con tarjeta).'}
           </p>
 
