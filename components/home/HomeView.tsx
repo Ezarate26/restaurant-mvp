@@ -9,6 +9,8 @@ import { BillingStatusBadge } from '@/components/billing/BillingStatusBadge';
 import { ConversaIcon } from '@/components/brand/ConversaIcon';
 import { JoinByCodeModal } from '@/components/conversation/JoinByCodeModal';
 import { AppSidebar } from '@/components/layout/AppSidebar';
+import { DashboardStatsCards } from '@/components/home/DashboardStatsCards';
+import { ConversationHistorySection } from '@/components/home/ConversationHistorySection';
 import {
   MobileNavButton,
   MobileNavProvider,
@@ -56,40 +58,43 @@ export function HomeView() {
             </div>
           </header>
 
-          <main className="chat-pane-bg flex min-h-0 flex-1 flex-col items-center justify-center px-4 py-10">
-            <div className="w-full max-w-md text-center">
-              <p className="text-xs font-semibold uppercase tracking-widest text-[var(--app-primary)]">
-                {t.home.badge}
-              </p>
-              <h1 className="mt-3 text-2xl font-bold tracking-tight sm:text-3xl">
-                {formatMessage(t.home.greeting, { name: displayName })}
-              </h1>
-              <p className="mt-3 text-sm leading-relaxed text-[var(--app-muted)]">
-                {t.home.subtitle}
-              </p>
+          <main className="chat-pane-bg flex min-h-0 flex-1 flex-col overflow-y-auto px-4 py-8 app-scrollbar sm:px-6 sm:py-10">
+            <div className="mx-auto w-full max-w-4xl">
+              <div className="text-center lg:text-left">
+                <p className="text-xs font-semibold uppercase tracking-widest text-[var(--app-primary)]">
+                  {t.home.badge}
+                </p>
+                <h1 className="mt-3 text-2xl font-bold tracking-tight sm:text-3xl">
+                  {formatMessage(t.home.greeting, { name: displayName })}
+                </h1>
+                <p className="mt-3 text-sm leading-relaxed text-[var(--app-muted)] sm:max-w-2xl">
+                  {t.home.subtitle}
+                </p>
 
-              <div className="mt-8 flex flex-col gap-3 sm:flex-row sm:justify-center">
-                <Link
-                  href="/create"
-                  className={`${uiBtnPrimary} sm:w-auto sm:min-w-[200px] sm:px-8`}
-                >
-                  {t.home.createConversation}
-                </Link>
-                <button
-                  type="button"
-                  onClick={() => setJoinOpen(true)}
-                  className={`${uiBtnSecondary} sm:w-auto sm:min-w-[200px] sm:px-8`}
-                >
-                  {t.home.joinConversation}
-                </button>
+                <div className="mt-8 flex flex-col gap-3 sm:flex-row sm:justify-center lg:justify-start">
+                  <Link
+                    href="/create"
+                    className={`${uiBtnPrimary} sm:w-auto sm:min-w-[200px] sm:px-8`}
+                  >
+                    {t.home.createConversation}
+                  </Link>
+                  <button
+                    type="button"
+                    onClick={() => setJoinOpen(true)}
+                    className={`${uiBtnSecondary} sm:w-auto sm:min-w-[200px] sm:px-8`}
+                  >
+                    {t.home.joinConversation}
+                  </button>
+                </div>
               </div>
 
-              <p className="mt-6 text-xs text-[var(--app-muted)]">
-                {t.home.currentPlan}{' '}
-                <span className="font-semibold text-[var(--app-text)]">
-                  {tier === 'pro' ? t.home.planPro : t.home.planFree}
-                </span>
-              </p>
+              <div className="mt-10">
+                <DashboardStatsCards tier={tier} />
+              </div>
+
+              <div className="mt-10">
+                <ConversationHistorySection isPro={tier === 'pro'} />
+              </div>
             </div>
           </main>
         </div>

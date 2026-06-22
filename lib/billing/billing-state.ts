@@ -21,6 +21,8 @@ export type UserBillingSnapshot = {
   roomPassConversationId: string | null;
   /** Todos los pases activos del usuario */
   activeRoomPasses: ActiveRoomPassInfo[];
+  /** Saldo bolsa 24 h (ms) — solo sesiones activas lo consumen */
+  hourBalanceMs: number;
 };
 
 export type BillingUiMode = 'free' | 'pro' | 'room_pass';
@@ -37,6 +39,7 @@ export const EMPTY_BILLING_SNAPSHOT: UserBillingSnapshot = {
   roomPassExpiresAt: null,
   roomPassConversationId: null,
   activeRoomPasses: [],
+  hourBalanceMs: 0,
 };
 
 export function resolveBillingUiMode(

@@ -28,6 +28,7 @@ import {
   openBillingPortal,
   startProCheckout,
   startRoomPassCheckout,
+  startHours24PackCheckout,
 } from '@/lib/billing/stripe-client';
 import type { PlanLimits, PlanTier } from '@/lib/billing/types';
 
@@ -44,6 +45,7 @@ type PlanContextValue = {
   requireAuthForUpgrade: () => boolean;
   upgradeToPro: (returnUrl?: string) => Promise<void>;
   buyRoomPass: (conversationId: string, returnUrl?: string) => Promise<void>;
+  buyHours24Pack: (returnUrl?: string) => Promise<void>;
   manageBilling: (returnUrl?: string) => Promise<void>;
   refreshPlan: (conversationId?: string) => Promise<UserBillingSnapshot | null>;
   syncForConversation: (conversationId: string) => Promise<void>;
@@ -128,6 +130,15 @@ export function PlanProvider({ children }: { children: ReactNode }) {
     [requireAuthForUpgrade]
   );
 
+  const buyHours24Pack = useCallback(
+    async (returnUrl = '/app/billing') => {
+      if (requireAuthForUpgrade()) return;
+      if (billingRef.current.tier === 'pro') return;
+      await startHours24PackCheckout(returnUrl);
+    },
+    [requireAuthForUpgrade]
+  );
+
   const manageBilling = useCallback(
     async (returnUrl = '/app/billing') => {
       if (requireAuthForUpgrade()) return;
@@ -188,6 +199,7 @@ export function PlanProvider({ children }: { children: ReactNode }) {
       requireAuthForUpgrade,
       upgradeToPro,
       buyRoomPass,
+      buyHours24Pack,
       manageBilling,
       refreshPlan,
       syncForConversation,
@@ -206,6 +218,7 @@ export function PlanProvider({ children }: { children: ReactNode }) {
       requireAuthForUpgrade,
       upgradeToPro,
       buyRoomPass,
+      buyHours24Pack,
       manageBilling,
       refreshPlan,
       syncForConversation,

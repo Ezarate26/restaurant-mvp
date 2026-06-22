@@ -224,6 +224,66 @@ export async function markTrialUsed(
   if (error) console.error('markTrialUsed', error);
 }
 
+export async function fetchUserHourBalanceMs(
+  client: SupabaseClient,
+  userId: string
+): Promise<number> {
+  const { data, error } = await client
+    .from('user_hour_balance')
+    .select('balance_ms')
+    .eq('user_id', userId)
+    .maybeSingle();
+
+  if (error) {
+    console.error('fetchUserHourBalanceMs', error);
+    return 0;
+  }
+  return Number((data as { balance_ms: number } | null)?.balance_ms ?? 0);
+}
+
+export async function creditHourPackPurchase(
+  client: SupabaseClient,
+  params: {
+    userId: string;
+    stripeCheckoutSessionId: string;
+    amountMs: number;
+  }
+): Promise<void> {
+  const { data: existing } = await client
+    .from('hour_pack_purchases')
+    .select('id')
+    .eq('stripe_checkout_session_id', params.stripeCheckoutSessionId)
+    .maybeSingle();
+
+  if (existing) return;
+
+  const { error: purchaseError } = await client.from('hour_pack_purchases').insert({
+    user_id: params.userId,
+    stripe_checkout_session_id: params.stripeCheckoutSessionId,
+    amount_ms: params.amountMs,
+  });
+
+  if (purchaseError) {
+    console.error('creditHourPackPurchase:insert', purchaseError);
+    throw purchaseError;
+  }
+
+  const current = await fetchUserHourBalanceMs(client, params.userId);
+  const { error: balanceError } = await client.from('user_hour_balance').upsert(
+    {
+      user_id: params.userId,
+      balance_ms: current + params.amountMs,
+      updated_at: new Date().toISOString(),
+    },
+    { onConflict: 'user_id' }
+  );
+
+  if (balanceError) {
+    console.error('creditHourPackPurchase:balance', balanceError);
+    throw balanceError;
+  }
+}
+
 export async function isTrialUsedForUser(
   client: SupabaseClient,
   userId: string

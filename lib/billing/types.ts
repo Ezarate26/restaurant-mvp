@@ -24,7 +24,7 @@ export interface StoredRoomPass {
 }
 
 export interface PlanDefinition {
-  id: PlanTier | 'room_pass';
+  id: PlanTier | 'room_pass' | 'hours_24';
   name: string;
   priceLabel: string;
   priceAmount?: number;

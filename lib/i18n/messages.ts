@@ -36,6 +36,34 @@ export type AppMessages = {
     currentPlan: string;
     planFree: string;
     planPro: string;
+    stats: {
+      currentPlan: string;
+      hoursRemaining: string;
+      chatsToday: string;
+      timeAvailable: string;
+      unlimited: string;
+      perRoom: string;
+      notAvailable: string;
+    };
+  };
+  history: {
+    title: string;
+    searchPlaceholder: string;
+    filterFrom: string;
+    filterTo: string;
+    roomName: string;
+    date: string;
+    languages: string;
+    duration: string;
+    participants: string;
+    lastActivity: string;
+    reopen: string;
+    closed: string;
+    empty: string;
+    proOnly: string;
+    upgradeCta: string;
+    loading: string;
+    active: string;
   };
   profile: {
     title: string;
@@ -108,6 +136,7 @@ export type AppMessages = {
     badge: string;
     heroTitle: string;
     heroSubtitle: string;
+    heroBullets: [string, string, string];
     createConversation: string;
     joinConversation: string;
     login: string;
@@ -128,8 +157,9 @@ export type AppMessages = {
     pricingSubtitle: string;
     plans: {
       free: { name: string; cta: string; features: string[] };
-      pro: { name: string; cta: string; features: string[] };
       room_pass: { name: string; cta: string; features: string[] };
+      hours_24: { name: string; cta: string; features: string[] };
+      pro: { name: string; cta: string; features: string[] };
     };
     planCard: {
       recommended: string;
@@ -178,12 +208,41 @@ export const MESSAGES: Record<AppLang, AppMessages> = {
       badge: 'conversa-io.chat',
       greeting: 'Hola, {name}',
       subtitle:
-        'Crea una sala nueva o únete con un código para empezar a conversar con traducción en tiempo real.',
+        'Traducción de conversaciones en tiempo real para conectar personas de cualquier parte del mundo.',
       createConversation: 'Crear conversación',
       joinConversation: 'Unirse a conversación',
       currentPlan: 'Plan actual:',
       planFree: 'Free',
       planPro: 'Pro',
+      stats: {
+        currentPlan: 'Plan actual',
+        hoursRemaining: 'Horas restantes',
+        chatsToday: 'Chats usados hoy',
+        timeAvailable: 'Tiempo disponible',
+        unlimited: 'Ilimitadas',
+        perRoom: 'Por sala',
+        notAvailable: '—',
+      },
+    },
+    history: {
+      title: 'Historial de conversaciones',
+      searchPlaceholder: 'Buscar por nombre o código…',
+      filterFrom: 'Desde',
+      filterTo: 'Hasta',
+      roomName: 'Sala',
+      date: 'Fecha',
+      languages: 'Idiomas',
+      duration: 'Duración',
+      participants: 'Participantes',
+      lastActivity: 'Última actividad',
+      reopen: 'Reabrir',
+      closed: 'Cerrada',
+      empty: 'Aún no tienes conversaciones en tu historial.',
+      proOnly:
+        'El historial de conversaciones está disponible únicamente para usuarios Pro.',
+      upgradeCta: 'Upgrade to Pro',
+      loading: 'Cargando historial…',
+      active: 'Activa',
     },
     profile: {
       title: 'Mi perfil',
@@ -257,22 +316,28 @@ export const MESSAGES: Record<AppLang, AppMessages> = {
     landing: {
       tagline: 'IA · Traducción en tiempo real',
       badge: 'Comunicación global con IA',
-      heroTitle: 'Habla con cualquier persona en cualquier idioma.',
-      heroSubtitle: 'Mensajes y voz traducidos por IA en tiempo real.',
+      heroTitle: 'Habla con cualquier persona, sin importar el idioma.',
+      heroSubtitle:
+        'Traducción de conversaciones en tiempo real para conectar personas de cualquier parte del mundo.',
+      heroBullets: [
+        'Conoce personas sin barreras de idioma.',
+        'Traducción instantánea de mensajes y voz.',
+        'Crea una sala y empieza a conversar en segundos.',
+      ],
       createConversation: 'Crear conversación',
       joinConversation: 'Unirse a conversación',
       login: 'Iniciar sesión',
       register: 'Registrarse',
       liveTitle: 'Traducción instantánea, en vivo',
       liveSubtitle:
-        'Cada participante lee y escucha en su idioma. La IA traduce texto y voz al momento.',
+        'Conoce personas de cualquier parte del mundo sin barreras de idioma.',
       featuresTitle: 'Diseñado para conversaciones reales',
       featuresSubtitle:
-        'Voz original y traducida, indicadores de actividad en tiempo real, participantes conectados y códigos QR para invitar al instante.',
+        'Traducción de conversaciones en tiempo real para personas reales.',
       features: [
-        'Traducción de texto y audio en tiempo real',
-        'Whisper + TTS con caché inteligente',
-        'Sin fricción: entra y habla en tu idioma',
+        'Habla con cualquier persona, sin importar el idioma.',
+        'Conoce personas de cualquier parte del mundo sin barreras de idioma.',
+        'Traducción de conversaciones en tiempo real para personas reales.',
       ],
       chatOriginal: 'Original (EN)',
       chatTranslated: 'Hola, ¿cómo estás?',
@@ -283,39 +348,55 @@ export const MESSAGES: Record<AppLang, AppMessages> = {
       pricingBadge: 'Planes',
       pricingTitle: 'Escala cuando lo necesites',
       pricingSubtitle:
-        'Empieza gratis. Pro incluye 7 días de prueba — luego $9.99/mes USD. Pase por sala $2.99 USD.',
+        'Empieza gratis. Pase por sala $2.99 · Bolsa 24 h $4.99 · Pro $9.99/mes con 7 días de prueba.',
       plans: {
         free: {
           name: 'Free',
           cta: 'Probar gratis',
           features: [
-            'Solo mensajes de texto',
             'Español ↔ Inglés',
-            'Hasta 2 participantes por sala',
-            'Sala activa 10 minutos',
-            'Hasta 5 conversaciones nuevas cada 24 h',
+            'Hasta 3 chats por día',
+            'Hasta 5 minutos por chat',
+            'Traducción de texto',
+            'Sin registro obligatorio',
+          ],
+        },
+        room_pass: {
+          name: 'Plan por sala',
+          cta: 'Comprar pase',
+          features: [
+            '1 hora de conversación',
+            'Todos los idiomas principales desbloqueados',
+            'Traducción de voz',
+            'Speech-to-Text',
+            'Text-to-Speech',
+            'Traducción de texto ilimitada durante la sesión',
+          ],
+        },
+        hours_24: {
+          name: 'Plan 24 Horas',
+          cta: 'Comprar bolsa',
+          features: [
+            'Bolsa de 24 horas de conversación',
+            'Todos los idiomas principales desbloqueados',
+            'Traducción de voz',
+            'Speech-to-Text',
+            'Text-to-Speech',
+            'Mostrar horas restantes en todo momento',
+            'Consumir horas únicamente durante sesiones activas',
           ],
         },
         pro: {
           name: 'Pro',
           cta: 'Probar 7 días gratis',
           features: [
-            '7 días de prueba gratis',
-            'Todos los idiomas',
-            'Mensajes de voz con traducción',
-            'Hasta 10 participantes',
-            'Sala activa 60 minutos',
-            'Facturación recurrente mensual',
-          ],
-        },
-        room_pass: {
-          name: 'Pase por sala',
-          cta: 'Comprar pase',
-          features: [
-            'Características Pro por 60 min',
-            'Pago único por sala',
-            'Ideal para reuniones puntuales',
-            'Sin suscripción',
+            'Horas ilimitadas',
+            'Todos los idiomas principales desbloqueados',
+            'Traducción de voz',
+            'Speech-to-Text',
+            'Text-to-Speech',
+            'Historial de conversaciones',
+            'Funcionalidades premium futuras',
           ],
         },
       },
@@ -369,12 +450,40 @@ export const MESSAGES: Record<AppLang, AppMessages> = {
       badge: 'conversa-io.chat',
       greeting: 'Hello, {name}',
       subtitle:
-        'Create a new room or join with a code to start chatting with real-time translation.',
+        'Real-time conversation translation to connect people anywhere in the world.',
       createConversation: 'Create conversation',
       joinConversation: 'Join conversation',
       currentPlan: 'Current plan:',
       planFree: 'Free',
       planPro: 'Pro',
+      stats: {
+        currentPlan: 'Current plan',
+        hoursRemaining: 'Hours remaining',
+        chatsToday: 'Chats used today',
+        timeAvailable: 'Time available',
+        unlimited: 'Unlimited',
+        perRoom: 'Per room',
+        notAvailable: '—',
+      },
+    },
+    history: {
+      title: 'Conversation history',
+      searchPlaceholder: 'Search by name or code…',
+      filterFrom: 'From',
+      filterTo: 'To',
+      roomName: 'Room',
+      date: 'Date',
+      languages: 'Languages',
+      duration: 'Duration',
+      participants: 'Participants',
+      lastActivity: 'Last activity',
+      reopen: 'Reopen',
+      closed: 'Closed',
+      empty: 'You have no conversations in your history yet.',
+      proOnly: 'Conversation history is available for Pro users only.',
+      upgradeCta: 'Upgrade to Pro',
+      loading: 'Loading history…',
+      active: 'Active',
     },
     profile: {
       title: 'My profile',
@@ -448,22 +557,28 @@ export const MESSAGES: Record<AppLang, AppMessages> = {
     landing: {
       tagline: 'AI · Real-time translation',
       badge: 'Global AI communication',
-      heroTitle: 'Talk to anyone in any language.',
-      heroSubtitle: 'AI-translated messages and voice in real time.',
+      heroTitle: 'Talk to anyone, no matter the language.',
+      heroSubtitle:
+        'Real-time conversation translation to connect people anywhere in the world.',
+      heroBullets: [
+        'Meet people without language barriers.',
+        'Instant message and voice translation.',
+        'Create a room and start chatting in seconds.',
+      ],
       createConversation: 'Create conversation',
       joinConversation: 'Join conversation',
       login: 'Log in',
       register: 'Sign up',
       liveTitle: 'Instant live translation',
       liveSubtitle:
-        'Every participant reads and hears in their language. AI translates text and voice on the fly.',
+        'Meet people anywhere in the world without language barriers.',
       featuresTitle: 'Built for real conversations',
       featuresSubtitle:
-        'Original and translated voice, live activity indicators, connected participants, and QR codes to invite instantly.',
+        'Real-time conversation translation for real people.',
       features: [
-        'Real-time text and audio translation',
-        'Whisper + TTS with smart caching',
-        'Frictionless: join and speak your language',
+        'Talk to anyone, no matter the language.',
+        'Meet people anywhere in the world without language barriers.',
+        'Real-time conversation translation for real people.',
       ],
       chatOriginal: 'Original (EN)',
       chatTranslated: 'Hello, how are you?',
@@ -474,39 +589,55 @@ export const MESSAGES: Record<AppLang, AppMessages> = {
       pricingBadge: 'Plans',
       pricingTitle: 'Scale when you need to',
       pricingSubtitle:
-        'Start free. Pro includes a 7-day trial — then $9.99/mo USD. Room pass $2.99 USD.',
+        'Start free. Room pass $2.99 · 24 h pack $4.99 · Pro $9.99/mo with 7-day trial.',
       plans: {
         free: {
           name: 'Free',
           cta: 'Try for free',
           features: [
-            'Text messages only',
             'Spanish ↔ English',
-            'Up to 2 participants per room',
-            '10-minute active room',
-            'Up to 5 new conversations every 24 h',
+            'Up to 3 chats per day',
+            'Up to 5 minutes per chat',
+            'Text translation',
+            'No sign-up required',
+          ],
+        },
+        room_pass: {
+          name: 'Per-room plan',
+          cta: 'Buy room pass',
+          features: [
+            '1 hour of conversation',
+            'All major languages unlocked',
+            'Voice translation',
+            'Speech-to-Text',
+            'Text-to-Speech',
+            'Unlimited text translation during the session',
+          ],
+        },
+        hours_24: {
+          name: '24-hour plan',
+          cta: 'Buy hour pack',
+          features: [
+            '24-hour conversation pack',
+            'All major languages unlocked',
+            'Voice translation',
+            'Speech-to-Text',
+            'Text-to-Speech',
+            'Remaining hours shown at all times',
+            'Hours consumed only during active sessions',
           ],
         },
         pro: {
           name: 'Pro',
           cta: 'Try 7 days free',
           features: [
-            '7-day free trial',
-            'All languages',
-            'Voice messages with translation',
-            'Up to 10 participants',
-            '60-minute active room',
-            'Monthly recurring billing',
-          ],
-        },
-        room_pass: {
-          name: 'Room pass',
-          cta: 'Buy room pass',
-          features: [
-            'Pro features for 60 min',
-            'One-time payment per room',
-            'Ideal for one-off meetings',
-            'No subscription',
+            'Unlimited hours',
+            'All major languages unlocked',
+            'Voice translation',
+            'Speech-to-Text',
+            'Text-to-Speech',
+            'Conversation history',
+            'Future premium features',
           ],
         },
       },

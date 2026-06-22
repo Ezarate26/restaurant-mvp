@@ -27,3 +27,13 @@ export function getRoomPassPriceId(): string {
   if (!id) throw new Error('STRIPE_PRICE_ROOM_PASS no configurado');
   return id;
 }
+
+export function getHours24PriceId(): string {
+  const id = process.env.STRIPE_PRICE_HOURS_24;
+  if (!id) throw new Error('STRIPE_PRICE_HOURS_24 no configurado');
+  return id;
+}
+
+export function isHours24PackConfigured(): boolean {
+  return Boolean(process.env.STRIPE_PRICE_HOURS_24);
+}

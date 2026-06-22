@@ -17,6 +17,7 @@ type BillingPlansSectionProps = {
   showStripeEmbed: boolean;
   onUpgradePro: () => void;
   onBuyRoomPass: () => void;
+  onBuyHours24Pack: () => void;
   onManageBilling: () => void;
 };
 
@@ -41,6 +42,7 @@ export function BillingPlansSection({
   showStripeEmbed,
   onUpgradePro,
   onBuyRoomPass,
+  onBuyHours24Pack,
   onManageBilling,
 }: BillingPlansSectionProps) {
   const remaining = formatRoomPassRemaining(billing.roomPassExpiresAt);
@@ -136,6 +138,7 @@ export function BillingPlansSection({
   const freePlan = PLAN_DEFINITIONS.find((p) => p.id === 'free')!;
   const proPlan = PLAN_DEFINITIONS.find((p) => p.id === 'pro')!;
   const roomPlan = PLAN_DEFINITIONS.find((p) => p.id === 'room_pass')!;
+  const hours24Plan = PLAN_DEFINITIONS.find((p) => p.id === 'hours_24')!;
 
   const proCta = billing.trialUsed
     ? 'Suscribirse a Pro'
@@ -180,18 +183,12 @@ export function BillingPlansSection({
           . No se te cobrará hasta que termine el periodo de prueba.
         </p>
       ) : null}
-      <div className="grid gap-5 md:grid-cols-3">
+      <div className="grid gap-5 sm:grid-cols-2 xl:grid-cols-4">
       <PlanCard
         plan={{ ...freePlan, cta: 'Plan actual' }}
         currentPlanId="free"
         disabled
         onSelect={() => undefined}
-      />
-      <PlanCard
-        plan={{ ...proPlan, cta: proCta }}
-        currentPlanId="free"
-        busy={busyPlanId === 'pro'}
-        onSelect={() => onUpgradePro()}
       />
       <PlanCard
         plan={roomPlan}
@@ -202,6 +199,18 @@ export function BillingPlansSection({
           roomId ? undefined : 'Abre billing desde una sala (?room=...)'
         }
         onSelect={() => onBuyRoomPass()}
+      />
+      <PlanCard
+        plan={hours24Plan}
+        currentPlanId="free"
+        busy={busyPlanId === 'hours_24'}
+        onSelect={() => onBuyHours24Pack()}
+      />
+      <PlanCard
+        plan={{ ...proPlan, cta: proCta }}
+        currentPlanId="free"
+        busy={busyPlanId === 'pro'}
+        onSelect={() => onUpgradePro()}
       />
     </div>
     </div>
