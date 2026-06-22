@@ -64,6 +64,12 @@ export async function startRoomPassCheckout(
   return data;
 }
 
+export async function startHours24PackCheckout(returnUrl?: string) {
+  const data = await postStripe('/api/stripe/hours-pack', { returnUrl });
+  if (data.url) window.location.href = data.url;
+  return data;
+}
+
 export async function openBillingPortal(returnUrl?: string) {
   const data = await postStripe('/api/stripe/portal', { returnUrl });
   if (data.url) window.location.href = data.url;

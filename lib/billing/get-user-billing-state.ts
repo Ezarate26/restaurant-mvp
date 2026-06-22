@@ -1,6 +1,7 @@
 import {
   fetchActiveRoomPassForConversation,
   fetchActiveRoomPassesForUser,
+  fetchUserHourBalanceMs,
   getOrCreateBillingRow,
   resolveEffectiveTier,
 } from '@/lib/billing/billing.repository';
@@ -21,7 +22,10 @@ export async function getUserBillingState(
   const service = createSupabaseServiceRole();
   const billing = await getOrCreateBillingRow(service, userId);
   const tier = resolveEffectiveTier(billing);
-  const activeRoomPasses = await fetchActiveRoomPassesForUser(service, userId);
+  const [activeRoomPasses, hourBalanceMs] = await Promise.all([
+    fetchActiveRoomPassesForUser(service, userId),
+    fetchUserHourBalanceMs(service, userId),
+  ]);
 
   let roomPassActive = false;
   let roomPassExpiresAt: string | null = null;
@@ -53,5 +57,6 @@ export async function getUserBillingState(
     roomPassExpiresAt,
     roomPassConversationId,
     activeRoomPasses,
+    hourBalanceMs,
   };
 }

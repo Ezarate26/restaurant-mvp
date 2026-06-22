@@ -5,7 +5,7 @@ export const ROOM_PASS_STORAGE_KEY = 'conversationPlatform.roomPasses';
 
 export const FREE_LIMITS: PlanLimits = {
   maxParticipants: 2,
-  roomDurationMinutes: 10,
+  roomDurationMinutes: 5,
   voiceEnabled: false,
   languages: 'es-en',
 };
@@ -16,6 +16,9 @@ export const PRO_LIMITS: PlanLimits = {
   voiceEnabled: true,
   languages: 'all',
 };
+
+/** Bolsa Plan 24 Horas (ms). */
+export const HOURS_24_PACK_MS = 24 * 60 * 60 * 1000;
 
 export const ROOM_PASS_DURATION_MINUTES = 60;
 
@@ -29,7 +32,7 @@ export const PRO_ROOM_EXTENSION_MS = 60 * 60_000;
 export const FREE_ROOM_EXTENSION_MS = 10 * 60_000;
 
 /** Máximo de salas nuevas por ventana de 24 h en plan Free. */
-export const FREE_DAILY_CONVERSATION_LIMIT = 5;
+export const FREE_DAILY_CONVERSATION_LIMIT = 3;
 
 /** Días de prueba gratuita del plan Pro (debe coincidir con STRIPE_TRIAL_DAYS). */
 export const PRO_TRIAL_DAYS = 7;
@@ -47,11 +50,46 @@ export const PLAN_DEFINITIONS: PlanDefinition[] = [
     priceLabel: '$0',
     cta: 'Probar gratis',
     features: [
-      'Solo mensajes de texto',
       'Español ↔ Inglés',
-      'Hasta 2 participantes por sala',
-      'Sala activa 10 minutos',
-      'Hasta 5 conversaciones nuevas cada 24 h',
+      'Hasta 3 chats por día',
+      'Hasta 5 minutos por chat',
+      'Traducción de texto',
+      'Sin registro obligatorio',
+    ],
+  },
+  {
+    id: 'room_pass',
+    name: 'Plan por sala',
+    priceLabel: '$2.99',
+    priceAmount: 299,
+    currency: 'usd',
+    interval: 'one_time',
+    cta: 'Comprar pase',
+    features: [
+      '1 hora de conversación',
+      'Todos los idiomas principales desbloqueados',
+      'Traducción de voz',
+      'Speech-to-Text',
+      'Text-to-Speech',
+      'Traducción de texto ilimitada durante la sesión',
+    ],
+  },
+  {
+    id: 'hours_24',
+    name: 'Plan 24 Horas',
+    priceLabel: '$4.99',
+    priceAmount: 499,
+    currency: 'usd',
+    interval: 'one_time',
+    cta: 'Comprar bolsa',
+    features: [
+      'Bolsa de 24 horas de conversación',
+      'Todos los idiomas principales desbloqueados',
+      'Traducción de voz',
+      'Speech-to-Text',
+      'Text-to-Speech',
+      'Mostrar horas restantes en todo momento',
+      'Consumir horas únicamente durante sesiones activas',
     ],
   },
   {
@@ -64,27 +102,13 @@ export const PLAN_DEFINITIONS: PlanDefinition[] = [
     highlighted: true,
     cta: 'Probar 7 días gratis',
     features: [
-      '7 días de prueba gratis',
-      'Todos los idiomas',
-      'Mensajes de voz con traducción',
-      'Hasta 10 participantes',
-      'Sala activa 60 minutos',
-      'Facturación recurrente mensual',
-    ],
-  },
-  {
-    id: 'room_pass',
-    name: 'Pase por sala',
-    priceLabel: '$2.99',
-    priceAmount: 299,
-    currency: 'usd',
-    interval: 'one_time',
-    cta: 'Comprar pase',
-    features: [
-      'Características Pro por 60 min',
-      'Pago único por sala',
-      'Ideal para reuniones puntuales',
-      'Sin suscripción',
+      'Horas ilimitadas',
+      'Todos los idiomas principales desbloqueados',
+      'Traducción de voz',
+      'Speech-to-Text',
+      'Text-to-Speech',
+      'Historial de conversaciones',
+      'Funcionalidades premium futuras',
     ],
   },
 ];

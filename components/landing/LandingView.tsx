@@ -8,6 +8,7 @@ import { ConversaBrand } from '@/components/brand/ConversaBrand';
 import { ConversaIcon } from '@/components/brand/ConversaIcon';
 import { PricingTable } from '@/components/billing/PricingTable';
 import { JoinByCodeModal } from '@/components/conversation/JoinByCodeModal';
+import { HeroChatMockup } from '@/components/landing/HeroChatMockup';
 import { LandingLanguageToggle } from '@/components/landing/LandingLanguageToggle';
 import { ThemeToggle } from '@/components/ui/ThemeToggle';
 import { FormSubmitLabel } from '@/components/ui/FormSubmitLabel';
@@ -78,6 +79,14 @@ export function LandingView() {
       await plan.upgradeToPro('/app/billing');
       return;
     }
+    if (planId === 'hours_24') {
+      await plan.buyHours24Pack('/app/billing');
+      return;
+    }
+    if (planId === 'room_pass') {
+      router.push('/app/billing');
+      return;
+    }
     router.push('/app/billing');
   };
 
@@ -146,33 +155,50 @@ export function LandingView() {
           </div>
         </header>
 
-        <div className="relative z-10 mx-auto flex max-w-6xl flex-col items-start px-4 pb-20 pt-8 sm:px-6 sm:pb-24 sm:pt-10 lg:pt-20">
-          <p
-            className="animate-fade-in-up rounded-full px-3 py-1 text-xs font-semibold uppercase tracking-widest text-[var(--app-primary)] ring-1 ring-[var(--app-primary)]/30"
-            style={{ background: 'var(--app-hover-bg)' }}
-          >
-            {t.badge}
-          </p>
-          <h1 className="animate-fade-in-up mt-6 max-w-4xl text-3xl font-bold leading-[1.1] tracking-tight sm:text-5xl lg:text-6xl">
-            {t.heroTitle}
-          </h1>
-          <p className="animate-fade-in-up mt-5 max-w-xl text-base leading-relaxed text-[var(--app-muted)] sm:text-lg">
-            {t.heroSubtitle}
-          </p>
-          <div className="animate-fade-in-up mt-8 flex w-full flex-col gap-3 sm:mt-10 sm:flex-row sm:flex-wrap">
-            <Link
-              href="/create"
-              className="app-hover touch-target btn-gradient inline-flex min-h-[44px] items-center justify-center rounded-xl px-6 py-3.5 text-center text-sm font-semibold glow-purple sm:px-8"
+        <div className="relative z-10 mx-auto grid max-w-6xl gap-10 px-4 pb-20 pt-8 sm:px-6 sm:pb-24 sm:pt-10 lg:grid-cols-2 lg:items-center lg:gap-12 lg:pt-16">
+          <div>
+            <p
+              className="animate-fade-in-up rounded-full px-3 py-1 text-xs font-semibold uppercase tracking-widest text-[var(--app-primary)] ring-1 ring-[var(--app-primary)]/30"
+              style={{ background: 'var(--app-hover-bg)' }}
             >
-              {t.createConversation}
-            </Link>
-            <button
-              type="button"
-              onClick={handleJoinNavClick}
-              className="app-hover touch-target inline-flex min-h-[44px] items-center justify-center rounded-xl bg-[var(--app-card)] px-6 py-3.5 text-sm font-semibold ring-1 ring-[var(--app-border)] hover:bg-[var(--app-hover-bg)] sm:px-8"
-            >
-              {t.joinConversation}
-            </button>
+              {t.badge}
+            </p>
+            <h1 className="animate-fade-in-up mt-6 max-w-4xl text-3xl font-bold leading-[1.1] tracking-tight sm:text-5xl lg:text-5xl xl:text-6xl">
+              {t.heroTitle}
+            </h1>
+            <p className="animate-fade-in-up mt-5 max-w-xl text-base leading-relaxed text-[var(--app-muted)] sm:text-lg">
+              {t.heroSubtitle}
+            </p>
+            <ul className="animate-fade-in-up mt-6 space-y-2.5 text-sm text-[var(--app-muted)] sm:text-base">
+              {t.heroBullets.map((bullet) => (
+                <li key={bullet} className="flex items-start gap-2.5">
+                  <span
+                    className="mt-2 inline-block h-1.5 w-1.5 shrink-0 rounded-full"
+                    style={{ background: 'var(--app-gradient)' }}
+                  />
+                  {bullet}
+                </li>
+              ))}
+            </ul>
+            <div className="animate-fade-in-up mt-8 flex w-full flex-col gap-3 sm:mt-10 sm:flex-row sm:flex-wrap">
+              <Link
+                href="/create"
+                className="app-hover touch-target btn-gradient inline-flex min-h-[44px] items-center justify-center rounded-xl px-6 py-3.5 text-center text-sm font-semibold glow-purple sm:px-8"
+              >
+                {t.createConversation}
+              </Link>
+              <button
+                type="button"
+                onClick={handleJoinNavClick}
+                className="app-hover touch-target inline-flex min-h-[44px] items-center justify-center rounded-xl bg-[var(--app-card)] px-6 py-3.5 text-sm font-semibold ring-1 ring-[var(--app-border)] hover:bg-[var(--app-hover-bg)] sm:px-8"
+              >
+                {t.joinConversation}
+              </button>
+            </div>
+          </div>
+
+          <div className="animate-fade-in-up w-full lg:justify-self-end">
+            <HeroChatMockup />
           </div>
         </div>
       </section>
@@ -269,7 +295,7 @@ export function LandingView() {
         id="pricing"
         className="border-t border-[var(--app-border)] bg-[var(--app-bg)] px-4 py-16 sm:px-6 sm:py-20"
       >
-        <div className="mx-auto max-w-5xl">
+        <div className="mx-auto max-w-7xl">
           <PricingTable
             locale={lang}
             onSelectPlan={handlePricingSelect}

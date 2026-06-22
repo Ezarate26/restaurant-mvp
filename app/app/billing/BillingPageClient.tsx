@@ -30,6 +30,7 @@ export function BillingPageClient() {
     isLoading,
     upgradeToPro,
     buyRoomPass,
+    buyHours24Pack,
     manageBilling,
     refreshPlan,
   } = usePlan();
@@ -58,6 +59,21 @@ export function BillingPageClient() {
       window.setTimeout(() => setNotice(null), 4000);
     }
   }, [checkout, reloadBilling]);
+
+  useEffect(() => {
+    const hoursPack = searchParams.get('hours_pack');
+    if (hoursPack === 'success') {
+      setNotice('Pago recibido. Acreditando tu bolsa de 24 horas…');
+      void reloadBilling().then(() => {
+        setNotice('Bolsa de 24 horas acreditada. El saldo aparece en tu inicio.');
+        window.setTimeout(() => setNotice(null), 5000);
+      });
+    } else if (hoursPack === 'cancel') {
+      setNotice('Compra cancelada. Tu saldo no ha cambiado.');
+      void reloadBilling();
+      window.setTimeout(() => setNotice(null), 4000);
+    }
+  }, [searchParams, reloadBilling]);
 
   useEffect(() => {
     const onPageShow = (event: PageTransitionEvent) => {
@@ -103,6 +119,18 @@ export function BillingPageClient() {
     setBusyPlanId('room_pass');
     try {
       await buyRoomPass(roomId, '/app/billing');
+    } catch (e) {
+      setNotice(e instanceof Error ? e.message : 'Error al iniciar checkout');
+    } finally {
+      setBusyPlanId(null);
+    }
+  };
+
+  const handleBuyHours24Pack = async () => {
+    setNotice(null);
+    setBusyPlanId('hours_24');
+    try {
+      await buyHours24Pack('/app/billing');
     } catch (e) {
       setNotice(e instanceof Error ? e.message : 'Error al iniciar checkout');
     } finally {
@@ -175,6 +203,7 @@ export function BillingPageClient() {
           showStripeEmbed={showStripeEmbed}
           onUpgradePro={() => void handleUpgradePro()}
           onBuyRoomPass={() => void handleBuyRoomPass()}
+          onBuyHours24Pack={() => void handleBuyHours24Pack()}
           onManageBilling={() => void manageBilling('/app/billing')}
         />
 

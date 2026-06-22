@@ -95,7 +95,7 @@ export function PricingTable({
           />
         </div>
       ) : variant === 'billing' ? (
-        <div className="grid gap-5 md:grid-cols-3">
+        <div className="grid gap-5 sm:grid-cols-2 xl:grid-cols-4">
           {plans.map((plan) => (
             <PlanCard
               key={plan.id}
@@ -108,7 +108,7 @@ export function PricingTable({
           ))}
         </div>
       ) : (
-        <div className="grid gap-5 md:grid-cols-3">
+        <div className="grid gap-5 sm:grid-cols-2 xl:grid-cols-4">
           {plans.map((plan) => (
             <PlanCard
               key={plan.id}

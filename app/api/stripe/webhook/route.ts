@@ -2,12 +2,13 @@ import { NextResponse } from 'next/server';
 import type Stripe from 'stripe';
 import {
   activateProSubscription,
+  creditHourPackPurchase,
   downgradeToFree,
   fetchUserBillingByCustomerId,
   fetchUserIdByEmail,
   insertRoomPass,
 } from '@/lib/billing/billing.repository';
-import { ROOM_PASS_DURATION_MINUTES } from '@/lib/billing/constants';
+import { HOURS_24_PACK_MS, ROOM_PASS_DURATION_MINUTES } from '@/lib/billing/constants';
 import { getStripe } from '@/lib/billing/stripe-server';
 import {
   syncTrialUsedFromCustomerId,
@@ -71,6 +72,22 @@ async function resolveCheckoutContext(
   return null;
 }
 
+async function sessionIncludesHours24Price(
+  session: Stripe.Checkout.Session
+): Promise<boolean> {
+  const hoursPriceId = process.env.STRIPE_PRICE_HOURS_24;
+  if (!hoursPriceId) return false;
+
+  if (session.metadata?.type === 'hours_24_pack') return true;
+
+  const stripe = getStripe();
+  const lineItems = await stripe.checkout.sessions.listLineItems(session.id, {
+    limit: 10,
+  });
+
+  return lineItems.data.some((item) => item.price?.id === hoursPriceId);
+}
+
 async function sessionIncludesRoomPassPrice(
   session: Stripe.Checkout.Session
 ): Promise<boolean> {
@@ -118,6 +135,21 @@ async function handleCheckoutCompleted(session: Stripe.Checkout.Session) {
   }
 
   if (session.mode === 'payment') {
+    const isHoursPack =
+      session.metadata?.type === 'hours_24_pack' ||
+      (await sessionIncludesHours24Price(session));
+
+    if (isHoursPack) {
+      const amountMs =
+        Number(session.metadata?.amountMs) || HOURS_24_PACK_MS;
+      await creditHourPackPurchase(supabase, {
+        userId: ctx.userId,
+        stripeCheckoutSessionId: session.id,
+        amountMs,
+      });
+      return;
+    }
+
     const isRoomPass =
       session.metadata?.type === 'room_pass' ||
       (await sessionIncludesRoomPassPrice(session));
